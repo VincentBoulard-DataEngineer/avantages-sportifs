@@ -23,6 +23,7 @@ services:
     container_name: avantages_kestra
     pull_policy: always
     env_file: .env
+    user: "root"
     command: server standalone
     ports:
       - "8080:8080"
@@ -32,6 +33,7 @@ services:
       - kestra_data:/app/storage
       - ./inbox:/inbox
       - ./archive:/archive
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       KESTRA_CONFIGURATION: |
         datasources:
@@ -52,6 +54,15 @@ services:
               basePath: /app/storage
           queue:
             type: postgres
+          plugins:
+            configurations:
+              - type: io.kestra.plugin.scripts.runner.docker.Docker
+                values:
+                  volume-enabled: true
+      SECRET_POSTGRES_USER: YXZhbnRhZ2VzX3VzZXI=
+      SECRET_POSTGRES_PASSWORD: YXZhbnRhZ2VzX3Bhc3M=
+      SECRET_POSTGRES_DB: YXZhbnRhZ2VzX3Nwb3J0aWZz
+      SECRET_POSTGRES_HOST: YXZhbnRhZ2VzX3Bvc3RncmVz
     depends_on:
       postgres:
         condition: service_healthy

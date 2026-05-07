@@ -1,0 +1,19 @@
+id: flow_ingestion
+namespace: avantages_sportifs
+
+tasks:
+  - id: ingestion
+    type: io.kestra.plugin.docker.Run
+    containerImage: avantages_sportifs_python:latest
+    pullPolicy: NEVER
+    networkMode: avantages_sportifs_avantages_network
+    commands:
+      - python
+      - /app/scripts/ingestion.py
+      - /inbox/donnees_rh.xlsx
+      - /inbox/donnees_sportives.xlsx
+    env:
+      POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+      POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+      POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+      POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
