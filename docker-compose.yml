@@ -59,6 +59,16 @@ services:
               - type: io.kestra.plugin.scripts.runner.docker.Docker
                 values:
                   volume-enabled: true
+              - type: io.kestra.plugin.fs.local.Trigger
+                values:
+                  allowed-paths:
+                    - /inbox
+                    - /archive
+              - type: io.kestra.plugin.fs.local.Move
+                values:
+                  allowed-paths:
+                    - /inbox
+                    - /archive
       SECRET_POSTGRES_USER: YXZhbnRhZ2VzX3VzZXI=
       SECRET_POSTGRES_PASSWORD: YXZhbnRhZ2VzX3Bhc3M=
       SECRET_POSTGRES_DB: YXZhbnRhZ2VzX3Nwb3J0aWZz

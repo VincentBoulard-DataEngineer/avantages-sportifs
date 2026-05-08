@@ -1,14 +1,17 @@
 """
-Ingestion script — reads HR and sports Excel files and loads raw data into PostgreSQL.
+Ingestion script — detects file type from filename and loads raw data into PostgreSQL.
 """
+
+import os
+import sys
+import logging
+from functools import partial
+from pathlib import Path
 
 import pandas as pd
 import psycopg2
 from psycopg2.extensions import connection as Connection
 from psycopg2.extras import execute_values
-import os
-import sys
-import logging
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -31,12 +34,14 @@ DB_CONFIG = {
 
 
 def load_employees(filepath: str, conn: Connection) -> None:
-    """Load raw HR data into raw.employees — UPSERT on employee_id.
+    """
+    Load raw HR data into raw.employees — UPSERT on employee_id.
 
     Args:
         filepath: Path to the HR Excel file.
         conn: Active psycopg2 database connection.
     """
+
     df = pd.read_excel(filepath)
     df.columns = [
         "employee_id", "last_name", "first_name", "birth_date", "bu",
@@ -71,12 +76,14 @@ def load_employees(filepath: str, conn: Connection) -> None:
 
 
 def load_sports(filepath: str, conn: Connection) -> None:
-    """Load raw sports data into raw.sports — UPSERT on employee_id.
+    """
+    Load raw sports declarations into raw.sports — UPSERT on employee_id.
 
     Args:
         filepath: Path to the sports Excel file.
         conn: Active psycopg2 database connection.
     """
+
     df = pd.read_excel(filepath)
     df.columns = ["employee_id", "sport"]
     df["employee_id"] = df["employee_id"].astype(int)
@@ -92,18 +99,45 @@ def load_sports(filepath: str, conn: Connection) -> None:
     logger.info("raw.sports upserted: %s rows", len(df))
 
 
+def load_activities(filepath: str, conn: Connection, slack_notified: bool) -> None:
+    """
+    Load raw activities into raw.activities — UPSERT on activity_id.
+
+    Args:
+        filepath: Path to the activities CSV file.
+        conn: Active psycopg2 database connection.
+        slack_notified: False for activites.csv (notification pending),
+                        True for activites_init.csv (no notification).
+    """
+    logger.info("load_activities — not yet implemented (slack_notified=%s)", slack_notified)
+
+
+FILE_TYPE_MAP = {
+    "donnees_rh.xlsx":        load_employees,
+    "donnees_sportives.xlsx": load_sports,
+    "activites.csv":          partial(load_activities, slack_notified=False),
+    "activites_init.csv":     partial(load_activities, slack_notified=True),
+}
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        logger.error("Usage: python ingestion.py <rh_file> <sport_file>")
+    if len(sys.argv) < 2:
+        logger.error("Usage: python ingestion.py <filepath>")
+        logger.error("Supported files: %s", ", ".join(FILE_TYPE_MAP.keys()))
         sys.exit(1)
 
-    rh_path    = sys.argv[1]
-    sport_path = sys.argv[2]
+    path_to_file = sys.argv[1]
+    filename = Path(path_to_file).name
+
+    if filename not in FILE_TYPE_MAP:
+        logger.error("Unknown file: %s. Supported files: %s", filename, ", ".join(FILE_TYPE_MAP.keys()))
+        sys.exit(1)
+
+    logger.info("Detected file type: %s", filename)
 
     db_conn = psycopg2.connect(**DB_CONFIG)
     try:
-        load_employees(rh_path, db_conn)
-        load_sports(sport_path, db_conn)
+        FILE_TYPE_MAP[filename](path_to_file, db_conn)
     except Exception as e:
         logger.error("Ingestion failed: %s", e)
         raise
