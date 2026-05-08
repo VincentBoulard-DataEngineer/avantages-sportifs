@@ -52,6 +52,26 @@ def load_employees(filepath: str, conn: Connection) -> None:
     df["birth_date"]  = pd.to_numeric(df["birth_date"], errors="coerce")
     df["hire_date"]   = pd.to_numeric(df["hire_date"], errors="coerce")
 
+    def val(v):
+        return None if pd.isna(v) else v
+
+    rows = [
+        (
+            int(row.employee_id),
+            val(row.last_name),
+            val(row.first_name),
+            val(row.birth_date),
+            val(row.bu),
+            val(row.hire_date),
+            val(row.gross_salary),
+            val(row.contract_type),
+            val(row.vacation_days),
+            val(row.home_address),
+            val(row.commute_mode),
+        )
+        for row in df.itertuples(index=False)
+    ]
+
     with conn.cursor() as cur:
         execute_values(cur, """
             INSERT INTO raw.employees (
@@ -70,14 +90,13 @@ def load_employees(filepath: str, conn: Connection) -> None:
                 vacation_days   = EXCLUDED.vacation_days,
                 home_address    = EXCLUDED.home_address,
                 commute_mode    = EXCLUDED.commute_mode
-        """, df.values.tolist())
+        """, rows)
     conn.commit()
     logger.info("raw.employees upserted: %s rows", len(df))
 
 
 def load_sports(filepath: str, conn: Connection) -> None:
-    """
-    Load raw sports declarations into raw.sports — UPSERT on employee_id.
+    """Load raw sports declarations into raw.sports — UPSERT on employee_id.
 
     Args:
         filepath: Path to the sports Excel file.
@@ -88,13 +107,21 @@ def load_sports(filepath: str, conn: Connection) -> None:
     df.columns = ["employee_id", "sport"]
     df["employee_id"] = df["employee_id"].astype(int)
 
+    rows = [
+        (
+            int(row.employee_id),
+            None if pd.isna(row.sport) else row.sport,
+        )
+        for row in df.itertuples(index=False)
+    ]
+
     with conn.cursor() as cur:
         execute_values(cur, """
             INSERT INTO raw.sports (employee_id, sport)
             VALUES %s
             ON CONFLICT (employee_id) DO UPDATE SET
                 sport = EXCLUDED.sport
-        """, df.values.tolist())
+        """, rows)
     conn.commit()
     logger.info("raw.sports upserted: %s rows", len(df))
 

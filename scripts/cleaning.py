@@ -77,7 +77,8 @@ def normalize_sport(value: str) -> str | None:
     Returns:
         Normalized sport name or None if value is missing.
     """
-    if pd.isna(value):
+
+    if value is None:
         return None
     normalized = str(value).strip().lower()
     return SPORT_CORRECTIONS.get(normalized, str(value).strip().title())
@@ -96,9 +97,9 @@ def clean_employees(conn: Connection) -> None:
     df["employee_id"]   = df["employee_id"].astype(int)
     df["last_name"]     = df["last_name"].str.strip().str.title()
     df["first_name"]    = df["first_name"].str.strip().str.title()
-    df["birth_date"]    = pd.to_datetime(df["birth_date"], unit="ns").dt.date
+    df["birth_date"]    = pd.to_datetime(df["birth_date"], unit="us").dt.date
     df["bu"]            = df["bu"].str.strip()
-    df["hire_date"]     = pd.to_datetime(df["hire_date"], unit="ns").dt.date
+    df["hire_date"]     = pd.to_datetime(df["hire_date"], unit="us").dt.date
     df["gross_salary"]  = df["gross_salary"].astype(float)
     df["contract_type"] = df["contract_type"].str.strip()
     df["vacation_days"] = df["vacation_days"].astype(int)
@@ -156,7 +157,12 @@ def clean_sports(conn: Connection) -> None:
     """
 
     df = read_table("raw.sports", conn)
-    df["sport"] = df["sport"].apply(normalize_sport)
+    df["employee_id"] = df["employee_id"].astype(int)
+
+    rows = [
+        (int(row.employee_id), None if pd.isna(row.sport) else normalize_sport(row.sport))
+        for row in df.itertuples(index=False)
+    ]
 
     with conn.cursor() as cur:
         execute_values(cur, """
@@ -164,7 +170,7 @@ def clean_sports(conn: Connection) -> None:
             VALUES %s
             ON CONFLICT (employee_id) DO UPDATE SET
                 sport = EXCLUDED.sport
-        """, df.values.tolist())
+        """, rows)
     conn.commit()
     logger.info("clean.sports upserted: %s rows", len(df))
 
