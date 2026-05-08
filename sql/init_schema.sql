@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS raw.sports (
 );
 
 CREATE TABLE IF NOT EXISTS raw.activities (
-    activity_id     INTEGER PRIMARY KEY,
+    activity_id     BIGINT PRIMARY KEY,
     employee_id     INTEGER,
     start_date      TIMESTAMP,
     sport_type      TEXT,
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS clean.sports (
 );
 
 CREATE TABLE IF NOT EXISTS clean.activities (
-    activity_id     INTEGER PRIMARY KEY,
+    activity_id     BIGINT PRIMARY KEY,
     employee_id     INTEGER,
     start_date      TIMESTAMP,
     sport_type      TEXT,

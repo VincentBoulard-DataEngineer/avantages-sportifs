@@ -29,10 +29,12 @@ Drop a file into the `/inbox/` folder. Kestra detects it automatically and trigg
 the appropriate treatment based on the filename. Processed files are moved to `/archive/`
 with a timestamp prefix (e.g. `20260508101950_donnees_rh.xlsx`).
 
-| File                     | Treatment                                |
-| ------------------------ | ---------------------------------------- |
-| `donnees_rh.xlsx`        | HR data ingestion + cleaning             |
-| `donnees_sportives.xlsx` | Sports declarations ingestion + cleaning |
+| File                     | Treatment                                                   |
+| ------------------------ | ----------------------------------------------------------- |
+| `donnees_rh.xlsx`        | HR data ingestion + cleaning                                |
+| `donnees_sportives.xlsx` | Sports declarations ingestion + cleaning                    |
+| `activites_init.csv`     | Activities ingestion + cleaning, no Slack notification      |
+| `activites.csv`          | Activities ingestion + cleaning, Slack notification pending |
 
 ## Google Maps commute validation
 

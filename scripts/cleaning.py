@@ -6,6 +6,7 @@ import os
 import sys
 import logging
 from pathlib import Path
+from functools import partial
 
 import pandas as pd
 import psycopg2
@@ -175,19 +176,59 @@ def clean_sports(conn: Connection) -> None:
     logger.info("clean.sports upserted: %s rows", len(df))
 
 
-def clean_activities(conn: Connection) -> None:
+def clean_activities(conn: Connection, slack_notified: bool = False) -> None:
     """
-    Clean activities — not yet implemented.
+    Read raw.activities, clean and write to clean.activities — UPSERT on activity_id.
+
+    Args:
+        conn: Active psycopg2 database connection.
+        slack_notified: False for activites.csv (notification pending),
+                        True for activites_init.csv (no notification).
     """
 
-    logger.info("clean_activities — not yet implemented")
+    df = read_table("raw.activities", conn)
+
+    df["activity_id"] = df["activity_id"].astype(int)
+    df["employee_id"] = df["employee_id"].astype(int)
+    df["distance_m"]  = pd.to_numeric(df["distance_m"], errors="coerce").astype("Int64")
+
+    rows = [
+        (
+            int(row.activity_id),
+            int(row.employee_id),
+            row.start_date,
+            row.sport_type if row.sport_type and str(row.sport_type) != "nan" else None,
+            None if pd.isna(row.distance_m) else int(row.distance_m),
+            row.end_date,
+            row.comment if row.comment and str(row.comment) != "nan" else None,
+            slack_notified,
+        )
+        for row in df.itertuples(index=False)
+    ]
+
+    with conn.cursor() as cur:
+        execute_values(cur, """
+            INSERT INTO clean.activities (
+                activity_id, employee_id, start_date, sport_type,
+                distance_m, end_date, comment, slack_notified
+            ) VALUES %s
+            ON CONFLICT (activity_id) DO UPDATE SET
+                employee_id    = EXCLUDED.employee_id,
+                start_date     = EXCLUDED.start_date,
+                sport_type     = EXCLUDED.sport_type,
+                distance_m     = EXCLUDED.distance_m,
+                end_date       = EXCLUDED.end_date,
+                comment        = EXCLUDED.comment
+        """, rows)
+    conn.commit()
+    logger.info("clean.activities upserted: %s rows", len(df))
 
 
 FILE_TYPE_MAP = {
     "donnees_rh.xlsx":        clean_employees,
     "donnees_sportives.xlsx": clean_sports,
-    "activites.csv":          clean_activities,
-    "activites_init.csv":     clean_activities,
+    "activites.csv":          partial(clean_activities, slack_notified=False),
+    "activites_init.csv":     partial(clean_activities, slack_notified=True),
 }
 
 

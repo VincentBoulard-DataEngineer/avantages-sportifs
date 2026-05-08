@@ -5,7 +5,6 @@ Ingestion script — detects file type from filename and loads raw data into Pos
 import os
 import sys
 import logging
-from functools import partial
 from pathlib import Path
 
 import pandas as pd
@@ -14,10 +13,8 @@ from psycopg2.extensions import connection as Connection
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-# Logger configuration
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
@@ -126,24 +123,59 @@ def load_sports(filepath: str, conn: Connection) -> None:
     logger.info("raw.sports upserted: %s rows", len(df))
 
 
-def load_activities(filepath: str, conn: Connection, slack_notified: bool) -> None:
+def load_activities(filepath: str, conn: Connection) -> None:
     """
-    Load raw activities into raw.activities — UPSERT on activity_id.
+    Load raw activity data into raw.activities — UPSERT on activity_id.
 
     Args:
         filepath: Path to the activities CSV file.
         conn: Active psycopg2 database connection.
-        slack_notified: False for activites.csv (notification pending),
-                        True for activites_init.csv (no notification).
     """
-    logger.info("load_activities — not yet implemented (slack_notified=%s)", slack_notified)
+
+    df = pd.read_csv(filepath)
+
+    df["activity_id"]  = df["activity_id"].astype(int)
+    df["employee_id"]  = df["employee_id"].astype(int)
+    df["start_date"]   = pd.to_datetime(df["start_date"])
+    df["end_date"]     = pd.to_datetime(df["end_date"])
+    df["distance_m"]   = pd.to_numeric(df["distance_m"], errors="coerce").astype("Int64")
+
+    rows = [
+        (
+            int(row.activity_id),
+            int(row.employee_id),
+            row.start_date.to_pydatetime(),
+            row.sport_type if row.sport_type and str(row.sport_type) != 'nan' else None,
+            None if pd.isna(row.distance_m) else int(row.distance_m),
+            row.end_date.to_pydatetime(),
+            row.comment if row.comment and str(row.comment) != 'nan' else None,
+        )
+        for row in df.itertuples(index=False)
+    ]
+
+    with conn.cursor() as cur:
+        execute_values(cur, """
+            INSERT INTO raw.activities (
+                activity_id, employee_id, start_date, sport_type,
+                distance_m, end_date, comment
+            ) VALUES %s
+            ON CONFLICT (activity_id) DO UPDATE SET
+                employee_id = EXCLUDED.employee_id,
+                start_date  = EXCLUDED.start_date,
+                sport_type  = EXCLUDED.sport_type,
+                distance_m  = EXCLUDED.distance_m,
+                end_date    = EXCLUDED.end_date,
+                comment     = EXCLUDED.comment
+        """, rows)
+    conn.commit()
+    logger.info("raw.activities upserted: %s rows", len(df))
 
 
 FILE_TYPE_MAP = {
     "donnees_rh.xlsx":        load_employees,
     "donnees_sportives.xlsx": load_sports,
-    "activites.csv":          partial(load_activities, slack_notified=False),
-    "activites_init.csv":     partial(load_activities, slack_notified=True),
+    "activites.csv":          load_activities,
+    "activites_init.csv":     load_activities
 }
 
 
