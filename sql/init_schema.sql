@@ -41,8 +41,7 @@ CREATE TABLE IF NOT EXISTS raw.activities (
     sport_type      TEXT,
     distance_m      INTEGER,
     end_date        TIMESTAMP,
-    comment         TEXT,
-    slack_notified  BOOLEAN DEFAULT FALSE
+    comment         TEXT
 );
 
 
@@ -69,13 +68,14 @@ CREATE TABLE IF NOT EXISTS clean.sports (
 );
 
 CREATE TABLE IF NOT EXISTS clean.activities (
-    activity_id INTEGER PRIMARY KEY,
-    employee_id INTEGER,
-    start_date  TIMESTAMP,
-    sport_type  TEXT,
-    distance_m  INTEGER,
-    end_date    TIMESTAMP,
-    comment     TEXT
+    activity_id     INTEGER PRIMARY KEY,
+    employee_id     INTEGER,
+    start_date      TIMESTAMP,
+    sport_type      TEXT,
+    distance_m      INTEGER,
+    end_date        TIMESTAMP,
+    comment         TEXT,
+    slack_notified  BOOLEAN DEFAULT FALSE
 );
 
 
