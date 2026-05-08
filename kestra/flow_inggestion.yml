@@ -23,6 +23,21 @@ tasks:
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
 
+      - id: clean
+        type: io.kestra.plugin.docker.Run
+        containerImage: avantages_sportifs_python:latest
+        pullPolicy: NEVER
+        networkMode: avantages_sportifs_avantages_network
+        commands:
+          - python
+          - /app/scripts/cleaning.py
+          - "{{ json(taskrun.value).name }}"
+        env:
+          POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+          POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+          POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+          POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+
       - id: archive_file
         type: io.kestra.plugin.fs.local.Move
         from: "/inbox/{{ json(taskrun.value).name }}"
