@@ -22,6 +22,7 @@ tasks:
           POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+          POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
 
       - id: clean
         type: io.kestra.plugin.docker.Run
@@ -37,6 +38,27 @@ tasks:
           POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+          POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+
+      - id: run_google_maps
+        type: io.kestra.plugin.core.flow.If
+        condition: "{{ json(taskrun.value).name == 'donnees_rh.xlsx' }}"
+        then:
+          - id: google_maps
+            type: io.kestra.plugin.docker.Run
+            containerImage: avantages_sportifs_python:latest
+            pullPolicy: NEVER
+            networkMode: avantages_sportifs_avantages_network
+            commands:
+              - python
+              - /app/scripts/google_maps.py
+            env:
+              POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+              POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+              POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+              POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+              POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+              GOOGLE_MAPS_API_KEY: "{{secret('GOOGLE_MAPS_API_KEY')}}"
 
       - id: archive_file
         type: io.kestra.plugin.fs.local.Move

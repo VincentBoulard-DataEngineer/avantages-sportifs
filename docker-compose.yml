@@ -73,6 +73,8 @@ services:
       SECRET_POSTGRES_PASSWORD: YXZhbnRhZ2VzX3Bhc3M=
       SECRET_POSTGRES_DB: YXZhbnRhZ2VzX3Nwb3J0aWZz
       SECRET_POSTGRES_HOST: YXZhbnRhZ2VzX3Bvc3RncmVz
+      SECRET_POSTGRES_PORT: NTQzMg==
+      SECRET_GOOGLE_MAPS_API_KEY: QUl6YVN5Q3NBY0NhR09WdWMwSVNtRWc4TW1UTXNVMkx0cHFQQmdv
     depends_on:
       postgres:
         condition: service_healthy

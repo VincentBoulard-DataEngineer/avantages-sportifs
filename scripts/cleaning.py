@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 DB_CONFIG = {
     "host":     os.getenv("POSTGRES_HOST", "localhost"),
-    "port":     5432,
+    "port":     int(os.getenv("POSTGRES_PORT") or "5432"),
     "dbname":   os.getenv("POSTGRES_DB"),
     "user":     os.getenv("POSTGRES_USER"),
     "password": os.getenv("POSTGRES_PASSWORD"),
