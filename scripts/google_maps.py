@@ -5,6 +5,7 @@ Google Maps validation script — validates employee commute declarations.
 import os
 import sys
 import logging
+from pathlib import Path
 import requests
 
 import psycopg2
@@ -45,6 +46,30 @@ COMMUTE_CONFIG = {
 ELIGIBLE_MODES = set(COMMUTE_CONFIG.keys())
 
 
+def get_current_batch_id(filename: str, conn: Connection) -> int:
+    """
+    Retrieve the batch_id of the latest completed batch for a given file.
+
+    Args:
+        filename: Name of the ingested file.
+        conn: Active psycopg2 database connection.
+
+    Returns:
+        The batch_id of the latest completed batch.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT batch_id FROM config.batches
+            WHERE filename = %s AND status = 'done'
+            ORDER BY started_at DESC
+            LIMIT 1
+        """, (filename,))
+        row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"No completed batch found for filename: {filename}")
+    return row[0]
+
+
 def get_distance_m(origin: str, travel_mode: str, api_key: str) -> int | None:
     """
     Call Google Maps Routes API to get distance between origin and office.
@@ -79,19 +104,27 @@ def get_distance_m(origin: str, travel_mode: str, api_key: str) -> int | None:
         return None
 
 
-def validate_commutes(conn: Connection) -> None:
+def validate_commutes(filename: str, conn: Connection) -> None:
     """
-    Validate commute declarations for eligible employees and update clean.employees.
+    Validate commute declarations for employees in the current batch.
+
+    Reads only employees from the current batch (filtered by batch_id),
+    calls Google Maps API for eligible commute modes, and updates
+    clean.employees with distance and validation result.
 
     Args:
+        filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
     """
+
+    batch_id = get_current_batch_id(filename, conn)
 
     with conn.cursor() as cur:
         cur.execute("""
             SELECT employee_id, first_name, last_name, home_address, commute_mode
             FROM clean.employees
-        """)
+            WHERE batch_id = %s
+        """, (batch_id,))
         employees = cur.fetchall()
 
     logger.info("Processing %s employees", len(employees))
@@ -143,9 +176,9 @@ def validate_commutes(conn: Connection) -> None:
     if anomalies:
         with conn.cursor() as cur:
             execute_values(cur, """
-                INSERT INTO quality_report.anomalies (table_name, test_name, detail)
+                INSERT INTO quality_report.anomalies (stage, table_name, test_name, detail)
                 VALUES %s
-            """, anomalies)
+            """, [("raw", a[0], a[1], a[2]) for a in anomalies])
 
     conn.commit()
     logger.info("Commute validation done: %s updates, %s anomalies", len(updates), len(anomalies))
@@ -156,9 +189,15 @@ if __name__ == "__main__":
         logger.error("GOOGLE_MAPS_API_KEY is not set")
         sys.exit(1)
 
+    if len(sys.argv) < 2:
+        logger.error("Usage: python google_maps.py <filename>")
+        sys.exit(1)
+
+    filename = Path(sys.argv[1]).name
+
     db_conn = psycopg2.connect(**DB_CONFIG)
     try:
-        validate_commutes(db_conn)
+        validate_commutes(filename, db_conn)
     except Exception as e:
         logger.error("Google Maps validation failed: %s", e)
         raise

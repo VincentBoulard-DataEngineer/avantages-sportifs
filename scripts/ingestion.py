@@ -30,12 +30,55 @@ DB_CONFIG = {
 }
 
 
-def load_employees(filepath: str, conn: Connection) -> None:
+def create_batch(filename: str, conn: Connection) -> int:
+    """
+    Create a new batch entry in config.batches and return its batch_id.
+
+    Args:
+        filename: Name of the file being ingested.
+        conn: Active psycopg2 database connection.
+
+    Returns:
+        The batch_id of the created batch.
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO config.batches (filename) VALUES (%s) RETURNING batch_id",
+            (filename,)
+        )
+        batch_id = cur.fetchone()[0]
+    conn.commit()
+    logger.info("Batch created: batch_id=%s", batch_id)
+    return batch_id
+
+
+def close_batch(batch_id: int, status: str, conn: Connection) -> None:
+    """
+    Update batch status to 'done' or 'failed'.
+
+    Args:
+        batch_id: The batch to close.
+        status: Final status — 'done' or 'failed'.
+        conn: Active psycopg2 database connection.
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE config.batches SET status = %s WHERE batch_id = %s",
+            (status, batch_id)
+        )
+    conn.commit()
+    logger.info("Batch closed: batch_id=%s status=%s", batch_id, status)
+
+
+def load_employees(filepath: str, batch_id: int, conn: Connection) -> None:
     """
     Load raw HR data into raw.employees — UPSERT on employee_id.
 
     Args:
         filepath: Path to the HR Excel file.
+        batch_id: Current batch identifier.
         conn: Active psycopg2 database connection.
     """
 
@@ -65,6 +108,7 @@ def load_employees(filepath: str, conn: Connection) -> None:
             val(row.vacation_days),
             val(row.home_address),
             val(row.commute_mode),
+            batch_id,
         )
         for row in df.itertuples(index=False)
     ]
@@ -74,7 +118,7 @@ def load_employees(filepath: str, conn: Connection) -> None:
             INSERT INTO raw.employees (
                 employee_id, last_name, first_name, birth_date, bu,
                 hire_date, gross_salary, contract_type, vacation_days,
-                home_address, commute_mode
+                home_address, commute_mode, batch_id
             ) VALUES %s
             ON CONFLICT (employee_id) DO UPDATE SET
                 last_name       = EXCLUDED.last_name,
@@ -86,17 +130,21 @@ def load_employees(filepath: str, conn: Connection) -> None:
                 contract_type   = EXCLUDED.contract_type,
                 vacation_days   = EXCLUDED.vacation_days,
                 home_address    = EXCLUDED.home_address,
-                commute_mode    = EXCLUDED.commute_mode
+                commute_mode    = EXCLUDED.commute_mode,
+                ingested_at     = NOW(),
+                batch_id        = EXCLUDED.batch_id
         """, rows)
     conn.commit()
     logger.info("raw.employees upserted: %s rows", len(df))
 
 
-def load_sports(filepath: str, conn: Connection) -> None:
-    """Load raw sports declarations into raw.sports — UPSERT on employee_id.
+def load_sports(filepath: str, batch_id: int, conn: Connection) -> None:
+    """
+    Load raw sports declarations into raw.sports — UPSERT on employee_id.
 
     Args:
         filepath: Path to the sports Excel file.
+        batch_id: Current batch identifier.
         conn: Active psycopg2 database connection.
     """
 
@@ -108,27 +156,31 @@ def load_sports(filepath: str, conn: Connection) -> None:
         (
             int(row.employee_id),
             None if pd.isna(row.sport) else row.sport,
+            batch_id,
         )
         for row in df.itertuples(index=False)
     ]
 
     with conn.cursor() as cur:
         execute_values(cur, """
-            INSERT INTO raw.sports (employee_id, sport)
+            INSERT INTO raw.sports (employee_id, sport, batch_id)
             VALUES %s
             ON CONFLICT (employee_id) DO UPDATE SET
-                sport = EXCLUDED.sport
+                sport       = EXCLUDED.sport,
+                ingested_at = NOW(),
+                batch_id    = EXCLUDED.batch_id
         """, rows)
     conn.commit()
     logger.info("raw.sports upserted: %s rows", len(df))
 
 
-def load_activities(filepath: str, conn: Connection) -> None:
+def load_activities(filepath: str, batch_id: int, conn: Connection) -> None:
     """
     Load raw activity data into raw.activities — UPSERT on activity_id.
 
     Args:
         filepath: Path to the activities CSV file.
+        batch_id: Current batch identifier.
         conn: Active psycopg2 database connection.
     """
 
@@ -148,7 +200,8 @@ def load_activities(filepath: str, conn: Connection) -> None:
             row.sport_type if row.sport_type and str(row.sport_type) != 'nan' else None,
             None if pd.isna(row.distance_m) else int(row.distance_m),
             row.end_date.to_pydatetime(),
-            row.comment if row.comment and str(row.comment) != 'nan' else None,
+            row.comment if row.comment and str(row.comment) != "nan" else None,
+            batch_id,
         )
         for row in df.itertuples(index=False)
     ]
@@ -157,7 +210,7 @@ def load_activities(filepath: str, conn: Connection) -> None:
         execute_values(cur, """
             INSERT INTO raw.activities (
                 activity_id, employee_id, start_date, sport_type,
-                distance_m, end_date, comment
+                distance_m, end_date, comment, batch_id
             ) VALUES %s
             ON CONFLICT (activity_id) DO UPDATE SET
                 employee_id = EXCLUDED.employee_id,
@@ -165,7 +218,9 @@ def load_activities(filepath: str, conn: Connection) -> None:
                 sport_type  = EXCLUDED.sport_type,
                 distance_m  = EXCLUDED.distance_m,
                 end_date    = EXCLUDED.end_date,
-                comment     = EXCLUDED.comment
+                comment     = EXCLUDED.comment,
+                ingested_at = NOW(),
+                batch_id    = EXCLUDED.batch_id
         """, rows)
     conn.commit()
     logger.info("raw.activities upserted: %s rows", len(df))
@@ -195,10 +250,13 @@ if __name__ == "__main__":
     logger.info("Detected file type: %s", filename)
 
     db_conn = psycopg2.connect(**DB_CONFIG)
+    batch_id = create_batch(filename, db_conn)
     try:
-        FILE_TYPE_MAP[filename](path_to_file, db_conn)
+        FILE_TYPE_MAP[filename](path_to_file, batch_id, db_conn)
+        close_batch(batch_id, "done", db_conn)
     except Exception as e:
         logger.error("Ingestion failed: %s", e)
+        close_batch(batch_id, "failed", db_conn)
         raise
     finally:
         db_conn.close()

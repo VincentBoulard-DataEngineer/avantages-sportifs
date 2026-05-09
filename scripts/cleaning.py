@@ -35,20 +35,49 @@ SPORT_CORRECTIONS = {
 }
 
 
-def read_table(table: str, conn: Connection) -> pd.DataFrame:
+def get_current_batch_id(filename: str, conn: Connection) -> int:
     """
-    Read a PostgreSQL table into a DataFrame using psycopg2 cursor.
+    Retrieve the batch_id of the latest completed batch for a given file.
 
     Args:
-        table: Fully qualified table name (e.g. 'raw.employees').
+        filename: Name of the ingested file.
         conn: Active psycopg2 database connection.
 
     Returns:
-        DataFrame with table contents.
+        The batch_id of the latest completed batch.
     """
 
     with conn.cursor() as cur:
-        cur.execute(f"SELECT * FROM {table}")
+        cur.execute("""
+            SELECT batch_id FROM config.batches
+            WHERE filename = %s AND status = 'done'
+            ORDER BY started_at DESC
+            LIMIT 1
+        """, (filename,))
+        row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"No completed batch found for filename: {filename}")
+    return row[0]
+
+
+def read_table(table: str, batch_id: int, conn: Connection) -> pd.DataFrame:
+    """
+    Read rows from a raw table filtered by batch_id.
+
+    Args:
+        table: Fully qualified table name (e.g. 'raw.employees').
+        batch_id: Current batch identifier.
+        conn: Active psycopg2 database connection.
+
+    Returns:
+        DataFrame containing only rows from the current batch.
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT * FROM {table} WHERE batch_id = %s",
+            (batch_id,)
+        )
         columns = [desc[0] for desc in cur.description]
         return pd.DataFrame(cur.fetchall(), columns=columns)
 
@@ -63,6 +92,7 @@ def normalize_commute_mode(value: str) -> str | None:
     Returns:
         Normalized string or None if value is missing.
     """
+
     if pd.isna(value):
         return None
     return str(value).strip().lower()
@@ -85,15 +115,17 @@ def normalize_sport(value: str) -> str | None:
     return SPORT_CORRECTIONS.get(normalized, str(value).strip().title())
 
 
-def clean_employees(conn: Connection) -> None:
+def clean_employees(filename: str, conn: Connection) -> None:
     """
-    Read raw.employees, normalize and write to clean.employees — UPSERT on employee_id.
+    Read raw.employees batch, normalize and write to clean.employees — UPSERT on employee_id.
 
     Args:
+        filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
     """
 
-    df = read_table("raw.employees", conn)
+    batch_id = get_current_batch_id(filename, conn)
+    df = read_table("raw.employees", batch_id, conn)
 
     df["employee_id"]   = df["employee_id"].astype(int)
     df["last_name"]     = df["last_name"].str.strip().str.title()
@@ -122,6 +154,7 @@ def clean_employees(conn: Connection) -> None:
             row.commute_mode,
             None,
             None,
+            batch_id,
         )
         for row in df.itertuples(index=False)
     ]
@@ -131,62 +164,77 @@ def clean_employees(conn: Connection) -> None:
             INSERT INTO clean.employees (
                 employee_id, last_name, first_name, birth_date, bu,
                 hire_date, gross_salary, contract_type, vacation_days,
-                home_address, commute_mode, commute_distance_m, commute_validated
+                home_address, commute_mode, commute_distance_m,
+                commute_validated, batch_id
             ) VALUES %s
             ON CONFLICT (employee_id) DO UPDATE SET
-                last_name           = EXCLUDED.last_name,
-                first_name          = EXCLUDED.first_name,
-                birth_date          = EXCLUDED.birth_date,
-                bu                  = EXCLUDED.bu,
-                hire_date           = EXCLUDED.hire_date,
-                gross_salary        = EXCLUDED.gross_salary,
-                contract_type       = EXCLUDED.contract_type,
-                vacation_days       = EXCLUDED.vacation_days,
-                home_address        = EXCLUDED.home_address,
-                commute_mode        = EXCLUDED.commute_mode
+                last_name     = EXCLUDED.last_name,
+                first_name    = EXCLUDED.first_name,
+                birth_date    = EXCLUDED.birth_date,
+                bu            = EXCLUDED.bu,
+                hire_date     = EXCLUDED.hire_date,
+                gross_salary  = EXCLUDED.gross_salary,
+                contract_type = EXCLUDED.contract_type,
+                vacation_days = EXCLUDED.vacation_days,
+                home_address  = EXCLUDED.home_address,
+                commute_mode  = EXCLUDED.commute_mode,
+                cleaned_at    = NOW(),
+                batch_id      = EXCLUDED.batch_id
+                -- commute_distance_m and commute_validated intentionally excluded:
+                -- updated by google_maps.py
         """, rows)
     conn.commit()
     logger.info("clean.employees upserted: %s rows", len(df))
 
 
-def clean_sports(conn: Connection) -> None:
+def clean_sports(filename: str, conn: Connection) -> None:
     """
-    Read raw.sports, normalize and write to clean.sports — UPSERT on employee_id.
+    Read raw.sports batch, normalize and write to clean.sports — UPSERT on employee_id.
 
     Args:
+        filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
     """
 
-    df = read_table("raw.sports", conn)
+    batch_id = get_current_batch_id(filename, conn)
+    df = read_table("raw.sports", batch_id, conn)
     df["employee_id"] = df["employee_id"].astype(int)
 
     rows = [
-        (int(row.employee_id), None if pd.isna(row.sport) else normalize_sport(row.sport))
+        (
+            int(row.employee_id),
+            None if pd.isna(row.sport) else normalize_sport(row.sport),
+            batch_id,
+        )
         for row in df.itertuples(index=False)
     ]
 
     with conn.cursor() as cur:
         execute_values(cur, """
-            INSERT INTO clean.sports (employee_id, sport)
+            INSERT INTO clean.sports (employee_id, sport, batch_id)
             VALUES %s
             ON CONFLICT (employee_id) DO UPDATE SET
-                sport = EXCLUDED.sport
+                sport      = EXCLUDED.sport,
+                cleaned_at = NOW(),
+                batch_id   = EXCLUDED.batch_id
         """, rows)
     conn.commit()
     logger.info("clean.sports upserted: %s rows", len(df))
 
 
-def clean_activities(conn: Connection, slack_notified: bool = False) -> None:
+def clean_activities(filename: str, conn: Connection, slack_notified: bool = False) -> None:
     """
-    Read raw.activities, clean and write to clean.activities — UPSERT on activity_id.
+    Read raw.activities batch, clean and write to clean.activities — UPSERT on activity_id.
 
     Args:
+        filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
         slack_notified: False for activites.csv (notification pending),
                         True for activites_init.csv (no notification).
     """
 
-    df = read_table("raw.activities", conn)
+    batch_id = get_current_batch_id(filename, conn)
+    df = read_table("raw.activities", batch_id, conn)
 
     df["activity_id"] = df["activity_id"].astype(int)
     df["employee_id"] = df["employee_id"].astype(int)
@@ -202,6 +250,7 @@ def clean_activities(conn: Connection, slack_notified: bool = False) -> None:
             row.end_date,
             row.comment if row.comment and str(row.comment) != "nan" else None,
             slack_notified,
+            batch_id,
         )
         for row in df.itertuples(index=False)
     ]
@@ -210,15 +259,18 @@ def clean_activities(conn: Connection, slack_notified: bool = False) -> None:
         execute_values(cur, """
             INSERT INTO clean.activities (
                 activity_id, employee_id, start_date, sport_type,
-                distance_m, end_date, comment, slack_notified
+                distance_m, end_date, comment, slack_notified, batch_id
             ) VALUES %s
             ON CONFLICT (activity_id) DO UPDATE SET
-                employee_id    = EXCLUDED.employee_id,
-                start_date     = EXCLUDED.start_date,
-                sport_type     = EXCLUDED.sport_type,
-                distance_m     = EXCLUDED.distance_m,
-                end_date       = EXCLUDED.end_date,
-                comment        = EXCLUDED.comment
+                employee_id = EXCLUDED.employee_id,
+                start_date  = EXCLUDED.start_date,
+                sport_type  = EXCLUDED.sport_type,
+                distance_m  = EXCLUDED.distance_m,
+                end_date    = EXCLUDED.end_date,
+                comment     = EXCLUDED.comment,
+                cleaned_at  = NOW(),
+                batch_id    = EXCLUDED.batch_id
+                -- slack_notified intentionally excluded: preserved from initial INSERT
         """, rows)
     conn.commit()
     logger.info("clean.activities upserted: %s rows", len(df))
@@ -248,7 +300,7 @@ if __name__ == "__main__":
 
     db_conn = psycopg2.connect(**DB_CONFIG)
     try:
-        FILE_TYPE_MAP[filename](db_conn)
+        FILE_TYPE_MAP[filename](filename, db_conn)
     except Exception as e:
         logger.error("Cleaning failed: %s", e)
         raise

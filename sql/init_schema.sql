@@ -14,6 +14,21 @@ CREATE SCHEMA IF NOT EXISTS config;
 CREATE SCHEMA IF NOT EXISTS quality_report;
 
 
+-- Config tables first (referenced by raw and clean tables)
+CREATE TABLE IF NOT EXISTS config.parameters (
+    key         VARCHAR(100) PRIMARY KEY,
+    value       VARCHAR(255) NOT NULL,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS config.batches (
+    batch_id   SERIAL PRIMARY KEY,
+    filename   TEXT NOT NULL,
+    started_at TIMESTAMP DEFAULT NOW(),
+    status     TEXT DEFAULT 'running'
+);
+
+
 -- Raw tables
 CREATE TABLE IF NOT EXISTS raw.employees (
     employee_id   INTEGER PRIMARY KEY,
@@ -26,12 +41,16 @@ CREATE TABLE IF NOT EXISTS raw.employees (
     contract_type TEXT,
     vacation_days FLOAT,
     home_address  TEXT,
-    commute_mode  TEXT
+    commute_mode  TEXT,
+    ingested_at   TIMESTAMP DEFAULT NOW(),
+    batch_id      INTEGER REFERENCES config.batches(batch_id)
 );
 
 CREATE TABLE IF NOT EXISTS raw.sports (
     employee_id INTEGER PRIMARY KEY,
-    sport       TEXT
+    sport       TEXT,
+    ingested_at TIMESTAMP DEFAULT NOW(),
+    batch_id    INTEGER REFERENCES config.batches(batch_id)
 );
 
 CREATE TABLE IF NOT EXISTS raw.activities (
@@ -41,7 +60,9 @@ CREATE TABLE IF NOT EXISTS raw.activities (
     sport_type      TEXT,
     distance_m      INTEGER,
     end_date        TIMESTAMP,
-    comment         TEXT
+    comment         TEXT,
+    ingested_at     TIMESTAMP DEFAULT NOW(),
+    batch_id        INTEGER REFERENCES config.batches(batch_id)
 );
 
 
@@ -59,12 +80,16 @@ CREATE TABLE IF NOT EXISTS clean.employees (
     home_address        TEXT,
     commute_mode        TEXT,
     commute_distance_m  INTEGER,
-    commute_validated   BOOLEAN 
+    commute_validated  BOOLEAN,
+    cleaned_at         TIMESTAMP DEFAULT NOW(),
+    batch_id           INTEGER REFERENCES config.batches(batch_id)
 );
 
 CREATE TABLE IF NOT EXISTS clean.sports (
     employee_id INTEGER PRIMARY KEY,
-    sport       TEXT
+    sport       TEXT,
+    cleaned_at  TIMESTAMP DEFAULT NOW(),
+    batch_id    INTEGER REFERENCES config.batches(batch_id)
 );
 
 CREATE TABLE IF NOT EXISTS clean.activities (
@@ -75,15 +100,9 @@ CREATE TABLE IF NOT EXISTS clean.activities (
     distance_m      INTEGER,
     end_date        TIMESTAMP,
     comment         TEXT,
-    slack_notified  BOOLEAN DEFAULT FALSE
-);
-
-
--- Config table
-CREATE TABLE IF NOT EXISTS config.parameters (
-    key         VARCHAR(100) PRIMARY KEY,
-    value       VARCHAR(255) NOT NULL,
-    description TEXT
+    slack_notified  BOOLEAN DEFAULT FALSE,
+    cleaned_at      TIMESTAMP DEFAULT NOW(),
+    batch_id        INTEGER REFERENCES config.batches(batch_id)
 );
 
 
@@ -91,7 +110,10 @@ CREATE TABLE IF NOT EXISTS config.parameters (
 CREATE TABLE IF NOT EXISTS quality_report.anomalies (
     id          SERIAL PRIMARY KEY,
     checked_at  TIMESTAMP DEFAULT NOW(),
+    stage       TEXT,
     table_name  TEXT,
     test_name   TEXT,
-    detail      TEXT
+    detail      TEXT,
+    employee_id INTEGER,
+    activity_id BIGINT
 );

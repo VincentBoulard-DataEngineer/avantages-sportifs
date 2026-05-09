@@ -32,21 +32,50 @@ DB_CONFIG = {
 }
 
 
-def read_table(table: str, conn: Connection) -> pd.DataFrame:
+def get_current_batch_id(filename: str, conn: Connection) -> int:
     """
-    Read a PostgreSQL table into a DataFrame.
+    Retrieve the batch_id of the latest completed batch for a given file.
 
     Args:
-        table: Fully qualified table name (e.g. 'raw.employees').
+        filename: Name of the ingested file.
         conn: Active psycopg2 database connection.
 
     Returns:
-        DataFrame containing all rows and columns from the table,
+        The batch_id of the latest completed batch.
+    """
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT batch_id FROM config.batches
+            WHERE filename = %s AND status = 'done'
+            ORDER BY started_at DESC
+            LIMIT 1
+        """, (filename,))
+        row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"No completed batch found for filename: {filename}")
+    return row[0]
+
+
+def read_table(table: str, batch_id: int, conn: Connection) -> pd.DataFrame:
+    """
+    Read rows from a raw table filtered by batch_id.
+
+    Args:
+        table: Fully qualified table name (e.g. 'raw.employees').
+        batch_id: Current batch identifier.
+        conn: Active psycopg2 database connection.
+
+    Returns:
+        DataFrame containing only rows from the current batch,
         with NaN values replaced by None.
     """
 
     with conn.cursor() as cur:
-        cur.execute(f"SELECT * FROM {table}")
+        cur.execute(
+            f"SELECT * FROM {table} WHERE batch_id = %s",
+            (batch_id,)
+        )
         columns = [desc[0] for desc in cur.description]
         df = pd.DataFrame(cur.fetchall(), columns=columns)
         return df.where(pd.notnull(df), None)
@@ -72,8 +101,8 @@ def run_expectation(
     Returns:
         List of anomaly dicts. Empty if the expectation passed.
     """
-    anomalies = []
 
+    anomalies = []
     if not result["success"]:
         for idx in result["result"].get("unexpected_index_list", []):
             row_id = df.iloc[idx][id_col]
@@ -119,26 +148,20 @@ def write_anomalies(anomalies: list[dict], conn: Connection) -> None:
     logger.info("Raw anomalies written: %s", len(rows))
 
 
-def test_raw_employees(conn: Connection) -> list[dict]:
+def test_raw_employees(filename: str, conn: Connection) -> list[dict]:
     """
-    Run GE quality checks on raw.employees.
-
-    Checks: mandatory fields not null (employee_id, last_name, first_name,
-    home_address, commute_mode, birth_date, hire_date), gross_salary > 0,
-    employee_id unique.
-
-    Note:
-        birth_date and hire_date are Excel serial floats in raw — date
-        coherence is validated in the clean quality pass.
+    Run GE quality checks on raw.employees for the current batch.
 
     Args:
+        filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
 
     Returns:
         List of anomaly dicts. Empty if all checks pass.
     """
 
-    df = read_table("raw.employees", conn)
+    batch_id = get_current_batch_id(filename, conn)
+    df    = read_table("raw.employees", batch_id, conn)
     ge_df = ge.from_pandas(df)
     ge_df.set_default_expectation_argument("result_format", "COMPLETE")
     anomalies = []
@@ -167,9 +190,9 @@ def test_raw_employees(conn: Connection) -> list[dict]:
     return anomalies
 
 
-def test_raw_sports(conn: Connection) -> list[dict]:
+def test_raw_sports(filename: str, conn: Connection) -> list[dict]:
     """
-    Run GE quality checks on raw.sports.
+    Run GE quality checks on raw.sports for the current batch.
 
     Checks: employee_id not null, employee_id unique.
 
@@ -178,13 +201,15 @@ def test_raw_sports(conn: Connection) -> list[dict]:
         where values have been normalized by cleaning.py.
 
     Args:
+        filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
 
     Returns:
         List of anomaly dicts. Empty if all checks pass.
     """
 
-    df = read_table("raw.sports", conn)
+    batch_id = get_current_batch_id(filename, conn)
+    df    = read_table("raw.sports", batch_id, conn)
     ge_df = ge.from_pandas(df)
     ge_df.set_default_expectation_argument("result_format", "COMPLETE")
     anomalies = []
@@ -204,18 +229,20 @@ def test_raw_sports(conn: Connection) -> list[dict]:
     return anomalies
 
 
-def test_raw_activities(conn: Connection) -> list[dict]:
+def test_raw_activities(filename: str, conn: Connection) -> list[dict]:
     """
-    Run GE quality checks on raw.activities.
+    Run GE quality checks on raw.activities for the current batch.
 
     Args:
+        filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
 
     Returns:
         List of anomaly dicts. Empty if all checks pass.
     """
 
-    df = read_table("raw.activities", conn)
+    batch_id = get_current_batch_id(filename, conn)
+    df    = read_table("raw.activities", batch_id, conn)
     ge_df = ge.from_pandas(df)
     ge_df.set_default_expectation_argument("result_format", "COMPLETE")
     anomalies = []
@@ -267,7 +294,7 @@ if __name__ == "__main__":
 
     db_conn = psycopg2.connect(**DB_CONFIG)
     try:
-        anomalies = FILE_TEST_MAP[filename](db_conn)
+        anomalies = FILE_TEST_MAP[filename](filename, db_conn)
         write_anomalies(anomalies, db_conn)
         logger.info("Raw quality tests done — total anomalies: %s", len(anomalies))
     except Exception as e:

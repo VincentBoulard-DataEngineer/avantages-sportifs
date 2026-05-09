@@ -29,12 +29,48 @@ Drop a file into the `/inbox/` folder. Kestra detects it automatically and trigg
 the appropriate treatment based on the filename. Processed files are moved to `/archive/`
 with a timestamp prefix (e.g. `20260508101950_donnees_rh.xlsx`).
 
-| File                     | Treatment                                                   |
-| ------------------------ | ----------------------------------------------------------- |
-| `donnees_rh.xlsx`        | HR data ingestion + cleaning                                |
-| `donnees_sportives.xlsx` | Sports declarations ingestion + cleaning                    |
-| `activites_init.csv`     | Activities ingestion + cleaning, no Slack notification      |
-| `activites.csv`          | Activities ingestion + cleaning, Slack notification pending |
+| File                     | Treatment                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `donnees_rh.xlsx`        | HR data ingestion + raw quality tests + cleaning                                |
+| `donnees_sportives.xlsx` | Sports declarations + raw quality tests ingestion + cleaning                    |
+| `activites_init.csv`     | Activities ingestion + raw quality tests + cleaning, no Slack notification      |
+| `activites.csv`          | Activities ingestion + raw quality tests + cleaning, Slack notification pending |
+
+## Pipeline steps
+
+For each file dropped in `/inbox/`, Kestra executes the following sequence:
+
+| Step | Script                 | Description                                             |
+| ---- | ---------------------- | ------------------------------------------------------- |
+| 1    | `ingestion.py`         | Load raw data into `raw.*` schema                       |
+| 2    | `quality_tests_raw.py` | Run Great Expectations checks on the ingested raw table |
+| 3    | `cleaning.py`          | Normalize and load into `clean.*` schema                |
+| 4    | `google_maps.py`       | Validate commute distances (HR file only)               |
+
+## Batch tracking
+
+Each file ingestion creates a batch entry in `config.batches` with a unique `batch_id`.
+This `batch_id` is propagated to all `raw.*` and `clean.*` tables, allowing downstream
+scripts (`quality_tests_raw.py`, `cleaning.py`, `google_maps.py`) to process only the
+rows from the current batch — not the entire table.
+
+| Status    | Meaning                                                  |
+| --------- | -------------------------------------------------------- |
+| `running` | Ingestion in progress                                    |
+| `done`    | Ingestion completed — batch ready for processing         |
+| `failed`  | Ingestion failed                                         |
+
+## Raw quality tests (Great Expectations)
+
+Quality checks run on `raw.*` tables after each ingestion, targeting only the table
+affected by the ingested file. Anomalies are written to `quality_report.anomalies`
+with `stage='raw'`.
+
+| File                                   | Table tested     | Checks                                                              |
+| -------------------------------------- | ---------------- | ------------------------------------------------------------------- |
+| `donnees_rh.xlsx`                      | `raw.employees`  | Mandatory fields not null, `gross_salary > 0`, `employee_id` unique |
+| `donnees_sportives.xlsx`               | `raw.sports`     | `employee_id` not null, `employee_id` unique                        |
+| `activites.csv` / `activites_init.csv` | `raw.activities` | Mandatory fields not null, `distance_m >= 0`, `activity_id` unique  |
 
 ## Google Maps commute validation
 
