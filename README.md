@@ -184,18 +184,22 @@ Rebuild the image whenever scripts are modified.
 from version control. A `docker-compose.yml.example` with placeholder values is
 provided as a template — copy it, fill in the secrets, and rename it to `docker-compose.yml`.
 
-The following variables must be defined in `.env` (used by Docker Compose to initialize PostgreSQL):
+The following variables must be defined in `.env`:
 
 ```env
 POSTGRES_USER=...
 POSTGRES_PASSWORD=...
 POSTGRES_DB=avantages_sportifs
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
 ```
 
-All other secrets (PostgreSQL connection details for scripts, Google Maps API key, Slack
-bot token, channel ID, and API URL) are managed as Kestra secrets in `docker-compose.yml`
-and passed to Python scripts via the flow `env:` configuration. Each secret value must be
-base64-encoded:
+These variables are used by Docker Compose to initialize PostgreSQL, and by
+`strava_generator.py` which runs locally and connects directly to the database.
+
+All other secrets (Google Maps API key, Slack bot token, channel ID, and API URL)
+are managed as Kestra secrets in `docker-compose.yml` and passed to Python scripts
+via the flow `env:` configuration. Each secret value must be base64-encoded:
 
 ```bash
 echo -n "your_value" | base64

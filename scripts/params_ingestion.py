@@ -12,9 +12,6 @@ import pandas as pd
 import psycopg2
 from psycopg2.extensions import connection as Connection
 from psycopg2.extras import execute_values
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
