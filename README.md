@@ -47,12 +47,13 @@ with a timestamp prefix (e.g. `20260508101950_donnees_rh.xlsx`).
 
 For each file dropped in `/inbox/`, Kestra executes the following sequence:
 
-| Step | Script                 | Description                                             |
-| ---- | ---------------------- | ------------------------------------------------------- |
-| 1    | `ingestion.py`         | Create batch, load raw data into `raw.*` schema         |
-| 2    | `quality_tests_raw.py` | Run Great Expectations checks on the ingested raw table |
-| 3    | `cleaning.py`          | Normalize and load into `clean.*` schema                |
-| 4    | `google_maps.py`       | Validate commute distances (HR file only)               |
+| Step | Script                   | Description                                             |
+| ---- | ------------------------ | ------------------------------------------------------- |
+| 1    | `ingestion.py`           | Create batch, load raw data into `raw.*` schema         |
+| 2    | `quality_tests_raw.py`   | Run Great Expectations checks on the ingested raw table |
+| 3    | `cleaning.py`            | Normalize and load into `clean.*` schema                |
+| 2    | `quality_tests_clean.py` | Run Great Expectations checks on the cleaned data       |
+| 4    | `google_maps.py`         | Validate commute distances (HR file only)               |
 
 ## Batch tracking
 
@@ -78,6 +79,21 @@ with `stage='raw'`.
 | `donnees_rh.xlsx`                      | `raw.employees`  | Mandatory fields not null, `gross_salary > 0`, `employee_id` unique                           |
 | `donnees_sportives.xlsx`               | `raw.sports`     | `employee_id` not null, `employee_id` unique                                                  |
 | `activites.csv` / `activites_init.csv` | `raw.activities` | Mandatory fields not null, `distance_m >= 0`, `activity_id` unique, `sport_type` in valid set |
+
+## Clean quality tests (Great Expectations)
+
+Quality checks run on `clean.*` tables after each cleaning pass, targeting only the rows
+from the current batch. Anomalies are written to `quality_report.anomalies`
+with `stage='clean'`.
+
+GE native checks are used where possible; pandas fallback is used for cross-table
+referential integrity and per-sport physical computations.
+
+| File                                   | Table tested       | Checks                                                                                                                                                                      |
+| -------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `donnees_rh.xlsx`                      | `clean.employees`  | `commute_mode` in valid set, `hire_date > birth_date`, `hire_date` in the past                                                                                              |
+| `donnees_sportives.xlsx`               | `clean.sports`     | `employee_id` exists in `clean.employees`                                                                                                                                   |
+| `activites.csv` / `activites_init.csv` | `clean.activities` | `sport_type` in valid set, `end_date > start_date`, duration > 2 min, max speed per sport, min duration per sport, no duplicates, `employee_id` exists in `clean.employees` |
 
 ## Parameters pipeline
 

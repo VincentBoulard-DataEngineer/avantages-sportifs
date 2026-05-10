@@ -220,6 +220,7 @@ def test_raw_sports(filename: str, conn: Connection) -> list[dict]:
 
     batch_id = get_current_batch_id(filename, conn)
     df    = read_table("raw.sports", batch_id, conn)
+    valid_sports = load_sports(conn)
     ge_df = ge.from_pandas(df)
     ge_df.set_default_expectation_argument("result_format", "COMPLETE")
     anomalies = []
@@ -234,6 +235,18 @@ def test_raw_sports(filename: str, conn: Connection) -> list[dict]:
         ge_df.expect_column_values_to_be_unique("employee_id").to_json_dict(),
         df, table, "employee_id_unique", "employee_id"
     )
+
+    # sport in valid set — tested on raw values before normalization
+    df_with_sport = df[df["sport"].notna()].reset_index(drop=True)
+    if not df_with_sport.empty:
+        ge_df_sport = ge.from_pandas(df_with_sport)
+        ge_df_sport.set_default_expectation_argument("result_format", "COMPLETE")
+        anomalies += run_expectation(
+            ge_df_sport.expect_column_values_to_be_in_set(
+                "sport", list(valid_sports)
+            ).to_json_dict(),
+            df_with_sport, table, "sport_valid", "employee_id"
+        )
 
     logger.info("test_raw_sports — %s anomalies", len(anomalies))
     return anomalies

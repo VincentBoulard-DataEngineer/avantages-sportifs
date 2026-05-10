@@ -22,7 +22,6 @@ tasks:
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
           POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
-
       - id: quality_raw
         type: io.kestra.plugin.docker.Run
         containerImage: avantages_sportifs_python:latest
@@ -38,7 +37,6 @@ tasks:
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
           POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
-
       - id: clean
         type: io.kestra.plugin.docker.Run
         containerImage: avantages_sportifs_python:latest
@@ -54,7 +52,21 @@ tasks:
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
           POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
-
+      - id: quality_clean
+        type: io.kestra.plugin.docker.Run
+        containerImage: avantages_sportifs_python:latest
+        pullPolicy: NEVER
+        networkMode: avantages_sportifs_avantages_network
+        commands:
+          - python
+          - /app/scripts/quality_tests_clean.py
+          - "{{ json(taskrun.value).name }}"
+        env:
+          POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+          POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+          POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+          POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+          POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
       - id: run_google_maps
         type: io.kestra.plugin.core.flow.If
         condition: "{{ json(taskrun.value).name == 'donnees_rh.xlsx' }}"
@@ -75,12 +87,10 @@ tasks:
               POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
               POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
               GOOGLE_MAPS_API_KEY: "{{secret('GOOGLE_MAPS_API_KEY')}}"
-
       - id: archive_file
         type: io.kestra.plugin.fs.local.Move
         from: "/inbox/{{ json(taskrun.value).name }}"
         to: "/archive/inbox/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
-
 triggers:
   - id: watch_inbox
     type: io.kestra.plugin.fs.local.Trigger
