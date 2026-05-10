@@ -47,13 +47,14 @@ with a timestamp prefix (e.g. `20260508101950_donnees_rh.xlsx`).
 
 For each file dropped in `/inbox/`, Kestra executes the following sequence:
 
-| Step | Script                   | Description                                             |
-| ---- | ------------------------ | ------------------------------------------------------- |
-| 1    | `ingestion.py`           | Create batch, load raw data into `raw.*` schema         |
-| 2    | `quality_tests_raw.py`   | Run Great Expectations checks on the ingested raw table |
-| 3    | `cleaning.py`            | Normalize and load into `clean.*` schema                |
-| 2    | `quality_tests_clean.py` | Run Great Expectations checks on the cleaned data       |
-| 4    | `google_maps.py`         | Validate commute distances (HR file only)               |
+| Step | Script                   | Description                                                 |
+| ---- | ------------------------ | ----------------------------------------------------------- |
+| 1    | `ingestion.py`           | Create batch, load raw data into `raw.*` schema             |
+| 2    | `quality_tests_raw.py`   | Run Great Expectations checks on the ingested raw table     |
+| 3    | `cleaning.py`            | Normalize and load into `clean.*` schema                    |
+| 4    | `quality_tests_clean.py` | Run Great Expectations checks on the cleaned data           |
+| 5    | `google_maps.py`         | Validate commute distances (HR file only)                   |
+| 6    | `calculs.py`             | Compute eligibilities and UPSERT into `results.eligibility` |
 
 ## Batch tracking
 
@@ -125,6 +126,20 @@ Only employees from the current batch are processed.
 Non-eligible modes (`véhicule thermique/électrique`, `transports en commun`) are
 automatically excluded from the sports bonus. Anomalies are logged in
 `quality_report.anomalies`.
+
+## Eligibility calculation
+
+After all files in `/inbox/` are processed, `calculs.py` runs once and computes
+eligibility for both benefits for all employees.
+
+| Benefit        | Condition                                                              | Amount                        |
+| -------------- | ---------------------------------------------------------------------- | ----------------------------- |
+| Sports bonus   | Eligible commute mode + `commute_validated = TRUE`                     | `gross_salary × bonus_rate`   |
+| Wellness days  | `activity_count >= activity_threshold` (anomalous activities excluded) | 5 days                        |
+
+Results are written to `results.eligibility` via UPSERT. Power BI reads this table directly.
+`calculs.py` is also triggered by `flow_params` whenever business parameters are updated,
+ensuring results are always consistent with the current configuration.
 
 ## Activity data generation
 

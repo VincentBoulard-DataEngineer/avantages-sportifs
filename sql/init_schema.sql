@@ -128,3 +128,20 @@ CREATE TABLE IF NOT EXISTS quality_report.anomalies (
     employee_id INTEGER,
     activity_id BIGINT
 );
+
+
+-- Results table
+CREATE TABLE IF NOT EXISTS results.eligibility (
+    employee_id       INTEGER PRIMARY KEY,
+    last_name         TEXT,
+    first_name        TEXT,
+    bu                TEXT,
+    gross_salary      NUMERIC,
+    commute_mode      TEXT,
+    commute_validated BOOLEAN,
+    eligible_prime    BOOLEAN,
+    prime_amount      NUMERIC,
+    activity_count    INTEGER,
+    eligible_wellness BOOLEAN,
+    calculated_at     TIMESTAMP DEFAULT NOW()
+);

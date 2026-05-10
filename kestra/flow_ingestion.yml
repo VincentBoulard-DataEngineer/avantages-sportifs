@@ -91,6 +91,20 @@ tasks:
         type: io.kestra.plugin.fs.local.Move
         from: "/inbox/{{ json(taskrun.value).name }}"
         to: "/archive/inbox/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
+  - id: calculs
+    type: io.kestra.plugin.docker.Run
+    containerImage: avantages_sportifs_python:latest
+    pullPolicy: NEVER
+    networkMode: avantages_sportifs_avantages_network
+    commands:
+      - python
+      - /app/scripts/calculs.py
+    env:
+      POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+      POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+      POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+      POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+      POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
 triggers:
   - id: watch_inbox
     type: io.kestra.plugin.fs.local.Trigger
