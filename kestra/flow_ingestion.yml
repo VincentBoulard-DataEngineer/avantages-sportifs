@@ -91,6 +91,27 @@ tasks:
         type: io.kestra.plugin.fs.local.Move
         from: "/inbox/{{ json(taskrun.value).name }}"
         to: "/archive/inbox/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
+      - id: run_slack
+        type: io.kestra.plugin.core.flow.If
+        condition: "{{ json(taskrun.value).name == 'activites.csv' }}"
+        then:
+          - id: slack
+            type: io.kestra.plugin.docker.Run
+            containerImage: avantages_sportifs_python:latest
+            pullPolicy: NEVER
+            networkMode: avantages_sportifs_avantages_network
+            commands:
+              - python
+              - /app/scripts/slack.py
+            env:
+              POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+              POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+              POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+              POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+              POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+              SLACK_BOT_TOKEN: "{{secret('SLACK_BOT_TOKEN')}}"
+              SLACK_CHANNEL_ID: "{{secret('SLACK_CHANNEL_ID')}}"
+              SLACK_API_URL: "{{secret('SLACK_API_URL')}}"
   - id: calculs
     type: io.kestra.plugin.docker.Run
     containerImage: avantages_sportifs_python:latest

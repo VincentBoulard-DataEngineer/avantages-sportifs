@@ -75,15 +75,15 @@ services:
                     - /archive/inbox
                     - /archive/params
                     - /params
-      SECRET_POSTGRES_USER: YXZhbnRhZ2VzX3VzZXI=
-      SECRET_POSTGRES_PASSWORD: YXZhbnRhZ2VzX3Bhc3M=
-      SECRET_POSTGRES_DB: YXZhbnRhZ2VzX3Nwb3J0aWZz
-      SECRET_POSTGRES_HOST: YXZhbnRhZ2VzX3Bvc3RncmVz
-      SECRET_POSTGRES_PORT: NTQzMg==
-      SECRET_GOOGLE_MAPS_API_KEY: QUl6YVN5Q3NBY0NhR09WdWMwSVNtRWc4TW1UTXNVMkx0cHFQQmdv
-      SECRET_SLACK_API_URL: aHR0cHM6Ly9zbGFjay5jb20vYXBpL2NoYXQucG9zdE1lc3NhZ2U=
-      SECRET_SLACK_BOT_TOKEN: eG94Yi0xMTA5MDc1MjY0NzQ5MS0xMTA5NzEzNTQxNzEzOC03U3liV1drVlNBMDFrUGpxYzhQQnZXSlc=
-      SECRET_SLACK_CHANNEL_ID: QzBCMkRLTVI2TEY=
+      SECRET_POSTGRES_USER: <base64 encoded value>
+      SECRET_POSTGRES_PASSWORD: <base64 encoded value>
+      SECRET_POSTGRES_DB: <base64 encoded value>
+      SECRET_POSTGRES_HOST: <base64 encoded value>
+      SECRET_POSTGRES_PORT: <base64 encoded value>
+      SECRET_GOOGLE_MAPS_API_KEY: <base64 encoded value>
+      SECRET_SLACK_API_URL: <base64 encoded value>
+      SECRET_SLACK_BOT_TOKEN: <base64 encoded value>
+      SECRET_SLACK_CHANNEL_ID: <base64 encoded value>
     depends_on:
       postgres:
         condition: service_healthy

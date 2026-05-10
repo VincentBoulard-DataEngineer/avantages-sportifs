@@ -36,25 +36,26 @@ Drop a file into the `/inbox/` folder. Kestra detects it automatically and trigg
 the appropriate treatment based on the filename. Processed files are moved to `/archive/inbox/`
 with a timestamp prefix (e.g. `20260508101950_donnees_rh.xlsx`).
 
-| File                     | Treatment                                                                       |
-| ------------------------ | ------------------------------------------------------------------------------- |
-| `donnees_rh.xlsx`        | HR data ingestion + raw quality tests + cleaning + Google Maps validation       |
-| `donnees_sportives.xlsx` | Sports declarations ingestion + raw quality tests + cleaning                    |
-| `activites_init.csv`     | Activities ingestion + raw quality tests + cleaning, no Slack notification      |
-| `activites.csv`          | Activities ingestion + raw quality tests + cleaning, Slack notification pending |
+| File                     | Treatment                                                                  |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `donnees_rh.xlsx`        | HR data ingestion + raw quality tests + cleaning + Google Maps validation  |
+| `donnees_sportives.xlsx` | Sports declarations ingestion + raw quality tests + cleaning               |
+| `activites_init.csv`     | Activities ingestion + raw quality tests + cleaning, no Slack notification |
+| `activites.csv`          | Activities ingestion + raw quality tests + cleaning + Slack notification   |
 
 ## Pipeline steps
 
 For each file dropped in `/inbox/`, Kestra executes the following sequence:
 
-| Step | Script                   | Description                                                 |
-| ---- | ------------------------ | ----------------------------------------------------------- |
-| 1    | `ingestion.py`           | Create batch, load raw data into `raw.*` schema             |
-| 2    | `quality_tests_raw.py`   | Run Great Expectations checks on the ingested raw table     |
-| 3    | `cleaning.py`            | Normalize and load into `clean.*` schema                    |
-| 4    | `quality_tests_clean.py` | Run Great Expectations checks on the cleaned data           |
-| 5    | `google_maps.py`         | Validate commute distances (HR file only)                   |
-| 6    | `calculs.py`             | Compute eligibilities and UPSERT into `results.eligibility` |
+| Step | Script                   | Description                                                         |
+| ---- | ------------------------ | ------------------------------------------------------------------- |
+| 1    | `ingestion.py`           | Create batch, load raw data into `raw.*` schema                     |
+| 2    | `quality_tests_raw.py`   | Run Great Expectations checks on the ingested raw table             |
+| 3    | `cleaning.py`            | Normalize and load into `clean.*` schema                            |
+| 4    | `quality_tests_clean.py` | Run Great Expectations checks on the cleaned data                   |
+| 5    | `google_maps.py`         | Validate commute distances (HR file only)                           |
+| 6    | `slack.py`               | Send Slack notifications for new activities (`activites.csv` only)  |
+| 7    | `calculs.py`             | Compute eligibilities and UPSERT into `results.eligibility`         |
 
 ## Batch tracking
 
@@ -100,7 +101,7 @@ referential integrity and per-sport physical computations.
 
 Business parameters and sports reference data are managed separately via the `/params/` folder.
 Dropping a file into `/params/` triggers `flow_params`, which updates the config tables
-and will trigger a full recalculation once `calculs.py` is implemented.
+and triggers a full recalculation of eligibilities.
 
 | File         | Table updated       | Description                            |
 | ------------ | ------------------- | -------------------------------------- |
@@ -126,6 +127,17 @@ Only employees from the current batch are processed.
 Non-eligible modes (`véhicule thermique/électrique`, `transports en commun`) are
 automatically excluded from the sports bonus. Anomalies are logged in
 `quality_report.anomalies`.
+
+## Slack notifications
+
+When `activites.csv` is processed, `slack.py` sends one Slack message per activity
+to the `#activites-sportives` channel. Activities from `activites_init.csv` are never
+notified — the filename is the signal.
+
+Each message includes the employee's name, sport type, duration, distance (if applicable),
+and optional comment. Intros, message bodies, and emojis are randomized for variety.
+Only activities from the current batch are processed (`batch_id` scoped query).
+Once notified, each activity is flagged `slack_notified = TRUE` to prevent duplicates.
 
 ## Eligibility calculation
 
@@ -168,21 +180,31 @@ Rebuild the image whenever scripts are modified.
 
 ## Environment variables
 
-The following variables must be defined in `.env`:
+`.env` and `docker-compose.yml` both contain sensitive credentials and are excluded
+from version control. A `docker-compose.yml.example` with placeholder values is
+provided as a template — copy it, fill in the secrets, and rename it to `docker-compose.yml`.
+
+The following variables must be defined in `.env` (used by Docker Compose to initialize PostgreSQL):
 
 ```env
 POSTGRES_USER=...
 POSTGRES_PASSWORD=...
 POSTGRES_DB=avantages_sportifs
-POSTGRES_PORT=5432
-POSTGRES_HOST=localhost
-GOOGLE_MAPS_API_KEY=...
+```
+
+All other secrets (PostgreSQL connection details for scripts, Google Maps API key, Slack
+bot token, channel ID, and API URL) are managed as Kestra secrets in `docker-compose.yml`
+and passed to Python scripts via the flow `env:` configuration. Each secret value must be
+base64-encoded:
+
+```bash
+echo -n "your_value" | base64
 ```
 
 ## Architecture notes
 
 Kestra and business data share the same PostgreSQL database `avantages_sportifs`,
-separated by schemas (`raw`, `clean`, `resultats`, `config`, `quality_report`).
+separated by schemas (`raw`, `clean`, `results`, `config`, `quality_report`).
 In production, using two separate databases would be recommended.
 
 Sport names and business parameters are managed in `config.sports` and `config.parameters`.
