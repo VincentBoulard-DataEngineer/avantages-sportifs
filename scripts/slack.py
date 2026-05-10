@@ -204,27 +204,28 @@ def mark_notified(conn, activity_id: int) -> None:
     conn.commit()
 
 
-
-def get_latest_batch_id(conn) -> int:
+def get_current_batch_id(filename: str, conn) -> int:
     """
-    Fetch the most recent batch_id from config.batches.
+    Retrieve the batch_id of the latest completed batch for a given file.
 
     Args:
+        filename: Name of the ingested file.
         conn: Active psycopg2 database connection.
 
     Returns:
-        The latest batch_id (integer).
+        The batch_id of the latest completed batch.
     """
 
     with conn.cursor() as cur:
         cur.execute("""
             SELECT batch_id FROM config.batches
-            ORDER BY batch_id DESC
+            WHERE filename = %s AND status = 'done'
+            ORDER BY started_at DESC
             LIMIT 1;
-        """)
+        """, (filename,))
         row = cur.fetchone()
     if not row:
-        raise ValueError("No batch found in config.batches")
+        raise ValueError(f"No completed batch found for filename: {filename}")
     return row[0]
 
 
@@ -240,7 +241,7 @@ def run(conn) -> None:
         logger.error("SLACK_BOT_TOKEN or SLACK_CHANNEL_ID is not set")
         raise ValueError("Missing Slack configuration")
 
-    batch_id = get_latest_batch_id(conn)
+    batch_id = get_current_batch_id("activites.csv", conn)
     logger.info("Processing batch_id=%d", batch_id)
 
     activities = fetch_pending_activities(conn, batch_id)

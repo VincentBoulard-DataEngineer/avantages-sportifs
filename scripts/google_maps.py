@@ -175,7 +175,7 @@ def validate_commutes(filename: str, conn: Connection) -> None:
             execute_values(cur, """
                 INSERT INTO quality_report.anomalies (stage, table_name, test_name, detail)
                 VALUES %s
-            """, [("raw", a[0], a[1], a[2]) for a in anomalies])
+            """, [("clean", a[0], a[1], a[2]) for a in anomalies])
 
     conn.commit()
     logger.info("Commute validation done: %s updates, %s anomalies", len(updates), len(anomalies))
