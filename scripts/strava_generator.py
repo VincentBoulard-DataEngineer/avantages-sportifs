@@ -36,24 +36,6 @@ ELIGIBLE_RATIO = 0.75
 ELIGIBLE_ACTIVITY_COUNT   = (15, 80)
 INELIGIBLE_ACTIVITY_COUNT = (1, 14)
 
-SPORT_CONFIG = {
-    "Running":         {"max_speed_kmh": 25,   "min_duration_min": 15,  "has_distance": True},
-    "Randonnée":       {"max_speed_kmh": 6,    "min_duration_min": 60,  "has_distance": True},
-    "Natation":        {"max_speed_kmh": 7,    "min_duration_min": 20,  "has_distance": True},
-    "Triathlon":       {"max_speed_kmh": 40,   "min_duration_min": 60,  "has_distance": True},
-    "Tennis":          {"max_speed_kmh": None, "min_duration_min": 30,  "has_distance": False},
-    "Badminton":       {"max_speed_kmh": None, "min_duration_min": 30,  "has_distance": False},
-    "Tennis de table": {"max_speed_kmh": None, "min_duration_min": 20,  "has_distance": False},
-    "Escalade":        {"max_speed_kmh": None, "min_duration_min": 60,  "has_distance": False},
-    "Football":        {"max_speed_kmh": None, "min_duration_min": 30,  "has_distance": False},
-    "Basketball":      {"max_speed_kmh": None, "min_duration_min": 30,  "has_distance": False},
-    "Rugby":           {"max_speed_kmh": None, "min_duration_min": 30,  "has_distance": False},
-    "Judo":            {"max_speed_kmh": None, "min_duration_min": 30,  "has_distance": False},
-    "Boxe":            {"max_speed_kmh": None, "min_duration_min": 20,  "has_distance": False},
-    "Équitation":      {"max_speed_kmh": None, "min_duration_min": 30,  "has_distance": False},
-    "Voile":           {"max_speed_kmh": None, "min_duration_min": 60,  "has_distance": False},
-}
-
 COMMENTS = [
     "Belle séance !",
     "Reprise du sport :)",
@@ -69,7 +51,40 @@ COMMENTS = [
 ]
 
 
-def generate_activity(activity_id: int, employee_id: int, sport: str, date: datetime) -> dict:
+def load_sport_config(conn: Connection) -> dict:
+    """
+    Load sport configuration from config.sports.
+
+    Args:
+        conn: Active psycopg2 database connection.
+
+    Returns:
+        Dict mapping sport name to its configuration dict with keys:
+        max_speed_kmh, min_duration_min, has_distance.
+    """
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT sport, max_speed_kmh, min_duration_min, has_distance
+            FROM config.sports
+        """)
+        return {
+            row[0]: {
+                "max_speed_kmh":    float(row[1]) if row[1] is not None else None,
+                "min_duration_min": int(row[2]),
+                "has_distance":     bool(row[3]),
+            }
+            for row in cur.fetchall()
+        }
+
+
+def generate_activity(
+    activity_id: int,
+    employee_id: int,
+    sport: str,
+    date: datetime,
+    sport_config: dict,
+) -> dict:
     """
     Generate a single realistic activity for a given sport and date.
 
@@ -78,19 +93,18 @@ def generate_activity(activity_id: int, employee_id: int, sport: str, date: date
         employee_id: Employee identifier.
         sport: Sport type.
         date: Activity start date.
+        sport_config: Sport configuration dict loaded from config.sports.
 
     Returns:
         Dictionary representing one activity row.
     """
 
-    config = SPORT_CONFIG.get(sport, SPORT_CONFIG["Running"])
+    config = sport_config.get(sport, sport_config.get("Running"))
 
-    # Generate duration
     min_duration = config["min_duration_min"]
     duration_min = random.randint(min_duration, min_duration * 3)
     end_date = date + timedelta(minutes=duration_min)
 
-    # Generate distance
     if config["has_distance"] and config["max_speed_kmh"]:
         max_distance_m = int(config["max_speed_kmh"] * duration_min / 60 * 1000 * 0.85)
         min_distance_m = int(config["max_speed_kmh"] * duration_min / 60 * 1000 * 0.3)
@@ -141,6 +155,7 @@ def generate_activities(conn: Connection) -> list[dict]:
     """
 
     employees = get_employees_with_sport(conn)
+    sport_config = load_sport_config(conn)
     logger.info("Found %s employees with a declared sport", len(employees))
 
     now = datetime.now()
@@ -159,7 +174,6 @@ def generate_activities(conn: Connection) -> list[dict]:
         else:
             activity_count = random.randint(*INELIGIBLE_ACTIVITY_COUNT)
 
-        # Generate random dates spread over the last 12 months
         dates = sorted([
             one_year_ago + timedelta(
                 days=random.randint(0, 364),
@@ -170,7 +184,9 @@ def generate_activities(conn: Connection) -> list[dict]:
         ])
 
         for date in dates:
-            activities.append(generate_activity(activity_id, employee_id, sport, date))
+            activities.append(
+                generate_activity(activity_id, employee_id, sport, date, sport_config)
+            )
             activity_id += 1
 
     logger.info("Generated %s activities", len(activities))

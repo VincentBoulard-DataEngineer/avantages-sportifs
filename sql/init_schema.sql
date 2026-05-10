@@ -28,6 +28,17 @@ CREATE TABLE IF NOT EXISTS config.batches (
     status     TEXT DEFAULT 'running'
 );
 
+CREATE TABLE IF NOT EXISTS config.sports (
+    sport            TEXT PRIMARY KEY,
+    max_speed_kmh    NUMERIC,
+    min_duration_min INTEGER NOT NULL,
+    has_distance     BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS config.commute_modes (
+    mode TEXT PRIMARY KEY
+);
+
 
 -- Raw tables
 CREATE TABLE IF NOT EXISTS raw.employees (
@@ -80,9 +91,9 @@ CREATE TABLE IF NOT EXISTS clean.employees (
     home_address        TEXT,
     commute_mode        TEXT,
     commute_distance_m  INTEGER,
-    commute_validated  BOOLEAN,
-    cleaned_at         TIMESTAMP DEFAULT NOW(),
-    batch_id           INTEGER REFERENCES config.batches(batch_id)
+    commute_validated   BOOLEAN,
+    cleaned_at          TIMESTAMP DEFAULT NOW(),
+    batch_id            INTEGER REFERENCES config.batches(batch_id)
 );
 
 CREATE TABLE IF NOT EXISTS clean.sports (

@@ -30,10 +30,6 @@ DB_CONFIG = {
     "password": os.getenv("POSTGRES_PASSWORD"),
 }
 
-SPORT_CORRECTIONS = {
-    "runing": "Running"
-}
-
 
 def get_current_batch_id(filename: str, conn: Connection) -> int:
     """
@@ -82,6 +78,22 @@ def read_table(table: str, batch_id: int, conn: Connection) -> pd.DataFrame:
         return pd.DataFrame(cur.fetchall(), columns=columns)
 
 
+def load_valid_sports(conn: Connection) -> dict:
+    """
+    Load sport names from config.sports as a lowercase-to-exact mapping.
+
+    Args:
+        conn: Active psycopg2 database connection.
+
+    Returns:
+        Dict mapping lowercase sport name to exact name from config.sports.
+    """
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT sport FROM config.sports")
+        return {row[0].lower(): row[0] for row in cur.fetchall()}
+
+
 def normalize_commute_mode(value: str) -> str | None:
     """
     Normalize commute mode to lowercase stripped string.
@@ -98,21 +110,21 @@ def normalize_commute_mode(value: str) -> str | None:
     return str(value).strip().lower()
 
 
-def normalize_sport(value: str) -> str | None:
+def normalize_sport(value: str, valid_sports: dict) -> str | None:
     """
-    Normalize sport name using known corrections dictionary.
+    Normalize sport name against config.sports reference data.
 
     Args:
         value: Raw sport name string.
+        valid_sports: Dict mapping lowercase sport name to exact name from config.sports.
 
     Returns:
-        Normalized sport name or None if value is missing.
+        Exact sport name from config.sports, or None if missing or unknown.
     """
 
-    if value is None:
+    if value is None or pd.isna(value):
         return None
-    normalized = str(value).strip().lower()
-    return SPORT_CORRECTIONS.get(normalized, str(value).strip().title())
+    return valid_sports.get(str(value).strip().lower())
 
 
 def clean_employees(filename: str, conn: Connection) -> None:
@@ -198,12 +210,13 @@ def clean_sports(filename: str, conn: Connection) -> None:
 
     batch_id = get_current_batch_id(filename, conn)
     df = read_table("raw.sports", batch_id, conn)
+    valid_sports = load_valid_sports(conn)
     df["employee_id"] = df["employee_id"].astype(int)
 
     rows = [
         (
             int(row.employee_id),
-            None if pd.isna(row.sport) else normalize_sport(row.sport),
+            normalize_sport(row.sport, valid_sports),
             batch_id,
         )
         for row in df.itertuples(index=False)

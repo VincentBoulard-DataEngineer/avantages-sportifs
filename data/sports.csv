@@ -1,0 +1,16 @@
+sport,max_speed_kmh,min_duration_min,has_distance
+Running,25,15,true
+Randonnée,6,60,true
+Natation,7,20,true
+Triathlon,40,60,true
+Tennis,,30,false
+Badminton,,30,false
+Tennis de table,,20,false
+Escalade,,60,false
+Football,,30,false
+Basketball,,30,false
+Rugby,,30,false
+Judo,,30,false
+Boxe,,20,false
+Équitation,,30,false
+Voile,,60,false

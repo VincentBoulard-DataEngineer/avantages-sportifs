@@ -1,0 +1,34 @@
+id: flow_params
+namespace: avantages_sportifs
+tasks:
+  - id: for_each_file
+    type: io.kestra.plugin.core.flow.ForEach
+    values: "{{ trigger.files }}"
+    tasks:
+      - id: ingest_params
+        type: io.kestra.plugin.docker.Run
+        containerImage: avantages_sportifs_python:latest
+        pullPolicy: NEVER
+        networkMode: avantages_sportifs_avantages_network
+        inputFiles:
+          "{{ json(taskrun.value).name }}": "{{ json(taskrun.value).uri }}"
+        commands:
+          - python
+          - /app/scripts/params_ingestion.py
+          - "{{workingDir}}/{{ json(taskrun.value).name }}"
+        env:
+          POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+          POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+          POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+          POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+          POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+      - id: archive_file
+        type: io.kestra.plugin.fs.local.Move
+        from: "/params/{{ json(taskrun.value).name }}"
+        to: "/archive/params/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
+triggers:
+  - id: watch_params
+    type: io.kestra.plugin.fs.local.Trigger
+    from: /params
+    interval: PT10S
+    action: NONE

@@ -32,7 +32,9 @@ services:
     volumes:
       - kestra_data:/app/storage
       - ./inbox:/inbox
-      - ./archive:/archive
+      - ./archive/inbox:/archive/inbox
+      - ./archive/params:/archive/params
+      - ./params:/params
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       KESTRA_CONFIGURATION: |
@@ -63,12 +65,16 @@ services:
                 values:
                   allowed-paths:
                     - /inbox
-                    - /archive
+                    - /archive/inbox
+                    - /archive/params
+                    - /params
               - type: io.kestra.plugin.fs.local.Move
                 values:
                   allowed-paths:
                     - /inbox
-                    - /archive
+                    - /archive/inbox
+                    - /archive/params
+                    - /params
       SECRET_POSTGRES_USER: YXZhbnRhZ2VzX3VzZXI=
       SECRET_POSTGRES_PASSWORD: YXZhbnRhZ2VzX3Bhc3M=
       SECRET_POSTGRES_DB: YXZhbnRhZ2VzX3Nwb3J0aWZz

@@ -79,7 +79,7 @@ tasks:
       - id: archive_file
         type: io.kestra.plugin.fs.local.Move
         from: "/inbox/{{ json(taskrun.value).name }}"
-        to: "/archive/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
+        to: "/archive/inbox/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
 
 triggers:
   - id: watch_inbox
