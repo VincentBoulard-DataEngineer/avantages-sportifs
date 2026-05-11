@@ -171,13 +171,16 @@ wellness days), 25% have <15 activities (not eligible).
 
 ## Docker image
 
-The Python image `avantages_sportifs_python` must be built locally before running the pipeline:
+The Python image is automatically built and pushed to `ghcr.io` via GitHub Actions
+whenever `docker/Dockerfile` or `pyproject.toml` is modified.
 
-```bash
-docker build -t avantages_sportifs_python -f docker/Dockerfile .
-```
+To trigger a manual rebuild: GitHub → Actions → **Build and push Docker image** → **Run workflow**.
 
-Rebuild the image whenever scripts are modified.
+The image contains only Python dependencies — scripts are loaded at runtime from
+the GitHub repository via Kestra's namespace file sync.
+
+The image is built and pushed to `ghcr.io/<github-username>/avantages-sportifs:latest`.
+Update the image tag in Kestra flows to match your GitHub username.
 
 ## Environment variables
 
