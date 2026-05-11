@@ -179,6 +179,10 @@ To trigger a manual rebuild: GitHub → Actions → **Build and push Docker imag
 The image contains only Python dependencies — scripts are loaded at runtime from
 the GitHub repository via Kestra's namespace file sync.
 
+At the start of each flow,scripts are synchronized from GitHub (`SyncNamespaceFiles`),
+the image is pulled once via a dedicated `pull_image` task (`pullPolicy: ALWAYS`),
+then reused from local cache for all subsequent tasks (`pullPolicy: IF_NOT_PRESENT`).
+
 The image is built and pushed to `ghcr.io/<github-username>/avantages-sportifs:latest`.
 Update the image tag in Kestra flows to match your GitHub username.
 

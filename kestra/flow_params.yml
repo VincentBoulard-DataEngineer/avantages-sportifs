@@ -1,45 +1,70 @@
 id: flow_params
 namespace: avantages_sportifs
 tasks:
+  - id: sync_scripts
+    type: io.kestra.plugin.git.SyncNamespaceFiles
+    url: https://github.com/VincentBoulard-DataEngineer/avantages-sportifs
+    branch: main
+    namespace: avantages_sportifs
+    gitDirectory: scripts
+
+  - id: pull_image
+    type: io.kestra.plugin.scripts.shell.Script
+    containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      pullPolicy: ALWAYS
+      networkMode: avantages_sportifs_avantages_network
+    script: |
+      echo "Image pulled"
+
   - id: for_each_file
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ trigger.files }}"
     tasks:
       - id: ingest_params
-        type: io.kestra.plugin.docker.Run
-        containerImage: avantages_sportifs_python:latest
-        pullPolicy: NEVER
-        networkMode: avantages_sportifs_avantages_network
+        type: io.kestra.plugin.scripts.shell.Script
+        containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          pullPolicy: IF_NOT_PRESENT
+          networkMode: avantages_sportifs_avantages_network
+        namespaceFiles:
+          enabled: true
         inputFiles:
           "{{ json(taskrun.value).name }}": "{{ json(taskrun.value).uri }}"
-        commands:
-          - python
-          - /app/scripts/params_ingestion.py
-          - "{{workingDir}}/{{ json(taskrun.value).name }}"
         env:
           POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
           POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
           POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+        script: |
+          python params_ingestion.py "{{ json(taskrun.value).name }}"
+
       - id: archive_file
         type: io.kestra.plugin.fs.local.Move
         from: "/params/{{ json(taskrun.value).name }}"
         to: "/archive/params/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
+
   - id: calculs
-    type: io.kestra.plugin.docker.Run
-    containerImage: avantages_sportifs_python:latest
-    pullPolicy: NEVER
-    networkMode: avantages_sportifs_avantages_network
-    commands:
-      - python
-      - /app/scripts/calculs.py
+    type: io.kestra.plugin.scripts.shell.Script
+    containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      pullPolicy: IF_NOT_PRESENT
+      networkMode: avantages_sportifs_avantages_network
+    namespaceFiles:
+      enabled: true
     env:
       POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
       POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
       POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
       POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
       POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+    script: |
+      python calculs.py
+
 triggers:
   - id: watch_params
     type: io.kestra.plugin.fs.local.Trigger

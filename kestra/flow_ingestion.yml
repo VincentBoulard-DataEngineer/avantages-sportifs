@@ -1,85 +1,114 @@
 id: flow_ingestion
 namespace: avantages_sportifs
 tasks:
+  - id: sync_scripts
+    type: io.kestra.plugin.git.SyncNamespaceFiles
+    url: https://github.com/VincentBoulard-DataEngineer/avantages-sportifs
+    branch: main
+    namespace: avantages_sportifs
+    gitDirectory: scripts
+
+  - id: pull_image
+    type: io.kestra.plugin.scripts.shell.Script
+    containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      pullPolicy: ALWAYS
+      networkMode: avantages_sportifs_avantages_network
+    script: |
+      echo "Image pulled"
+
   - id: for_each_file
     type: io.kestra.plugin.core.flow.ForEach
     values: "{{ trigger.files }}"
     tasks:
       - id: ingest
-        type: io.kestra.plugin.docker.Run
-        containerImage: avantages_sportifs_python:latest
-        pullPolicy: NEVER
-        networkMode: avantages_sportifs_avantages_network
+        type: io.kestra.plugin.scripts.shell.Script
+        containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          pullPolicy: IF_NOT_PRESENT
+          networkMode: avantages_sportifs_avantages_network
+        namespaceFiles:
+          enabled: true
         inputFiles:
           "{{ json(taskrun.value).name }}": "{{ json(taskrun.value).uri }}"
-        commands:
-          - python
-          - /app/scripts/ingestion.py
-          - "{{workingDir}}/{{ json(taskrun.value).name }}"
         env:
           POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
           POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
           POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+        script: |
+          python ingestion.py "{{ json(taskrun.value).name }}"
+
       - id: quality_raw
-        type: io.kestra.plugin.docker.Run
-        containerImage: avantages_sportifs_python:latest
-        pullPolicy: NEVER
-        networkMode: avantages_sportifs_avantages_network
-        commands:
-          - python
-          - /app/scripts/quality_tests_raw.py
-          - "{{ json(taskrun.value).name }}"
+        type: io.kestra.plugin.scripts.shell.Script
+        containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          pullPolicy: IF_NOT_PRESENT
+          networkMode: avantages_sportifs_avantages_network
+        namespaceFiles:
+          enabled: true
         env:
           POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
           POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
           POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+        script: |
+          python quality_tests_raw.py "{{ json(taskrun.value).name }}"
+
       - id: clean
-        type: io.kestra.plugin.docker.Run
-        containerImage: avantages_sportifs_python:latest
-        pullPolicy: NEVER
-        networkMode: avantages_sportifs_avantages_network
-        commands:
-          - python
-          - /app/scripts/cleaning.py
-          - "{{ json(taskrun.value).name }}"
+        type: io.kestra.plugin.scripts.shell.Script
+        containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          pullPolicy: IF_NOT_PRESENT
+          networkMode: avantages_sportifs_avantages_network
+        namespaceFiles:
+          enabled: true
         env:
           POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
           POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
           POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+        script: |
+          python cleaning.py "{{ json(taskrun.value).name }}"
+
       - id: quality_clean
-        type: io.kestra.plugin.docker.Run
-        containerImage: avantages_sportifs_python:latest
-        pullPolicy: NEVER
-        networkMode: avantages_sportifs_avantages_network
-        commands:
-          - python
-          - /app/scripts/quality_tests_clean.py
-          - "{{ json(taskrun.value).name }}"
+        type: io.kestra.plugin.scripts.shell.Script
+        containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          pullPolicy: IF_NOT_PRESENT
+          networkMode: avantages_sportifs_avantages_network
+        namespaceFiles:
+          enabled: true
         env:
           POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
           POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
           POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
           POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
           POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+        script: |
+          python quality_tests_clean.py "{{ json(taskrun.value).name }}"
+
       - id: run_google_maps
         type: io.kestra.plugin.core.flow.If
         condition: "{{ json(taskrun.value).name == 'donnees_rh.xlsx' }}"
         then:
           - id: google_maps
-            type: io.kestra.plugin.docker.Run
-            containerImage: avantages_sportifs_python:latest
-            pullPolicy: NEVER
-            networkMode: avantages_sportifs_avantages_network
-            commands:
-              - python
-              - /app/scripts/google_maps.py
-              - "donnees_rh.xlsx"
+            type: io.kestra.plugin.scripts.shell.Script
+            containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+            taskRunner:
+              type: io.kestra.plugin.scripts.runner.docker.Docker
+              pullPolicy: IF_NOT_PRESENT
+              networkMode: avantages_sportifs_avantages_network
+            namespaceFiles:
+              enabled: true
             env:
               POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
               POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
@@ -87,22 +116,27 @@ tasks:
               POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
               POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
               GOOGLE_MAPS_API_KEY: "{{secret('GOOGLE_MAPS_API_KEY')}}"
+            script: |
+              python google_maps.py "donnees_rh.xlsx"
+
       - id: archive_file
         type: io.kestra.plugin.fs.local.Move
         from: "/inbox/{{ json(taskrun.value).name }}"
         to: "/archive/inbox/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
+
       - id: run_slack
         type: io.kestra.plugin.core.flow.If
         condition: "{{ json(taskrun.value).name == 'activites.csv' }}"
         then:
           - id: slack
-            type: io.kestra.plugin.docker.Run
-            containerImage: avantages_sportifs_python:latest
-            pullPolicy: NEVER
-            networkMode: avantages_sportifs_avantages_network
-            commands:
-              - python
-              - /app/scripts/slack.py
+            type: io.kestra.plugin.scripts.shell.Script
+            containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+            taskRunner:
+              type: io.kestra.plugin.scripts.runner.docker.Docker
+              pullPolicy: IF_NOT_PRESENT
+              networkMode: avantages_sportifs_avantages_network
+            namespaceFiles:
+              enabled: true
             env:
               POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
               POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
@@ -112,20 +146,27 @@ tasks:
               SLACK_BOT_TOKEN: "{{secret('SLACK_BOT_TOKEN')}}"
               SLACK_CHANNEL_ID: "{{secret('SLACK_CHANNEL_ID')}}"
               SLACK_API_URL: "{{secret('SLACK_API_URL')}}"
+            script: |
+              python slack.py
+
   - id: calculs
-    type: io.kestra.plugin.docker.Run
-    containerImage: avantages_sportifs_python:latest
-    pullPolicy: NEVER
-    networkMode: avantages_sportifs_avantages_network
-    commands:
-      - python
-      - /app/scripts/calculs.py
+    type: io.kestra.plugin.scripts.shell.Script
+    containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      pullPolicy: IF_NOT_PRESENT
+      networkMode: avantages_sportifs_avantages_network
+    namespaceFiles:
+      enabled: true
     env:
       POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
       POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
       POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
       POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
       POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+    script: |
+      python calculs.py
+
 triggers:
   - id: watch_inbox
     type: io.kestra.plugin.fs.local.Trigger
