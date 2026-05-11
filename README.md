@@ -76,11 +76,11 @@ Quality checks run on `raw.*` tables after each ingestion, targeting only the ro
 from the current batch. Anomalies are written to `quality_report.anomalies`
 with `stage='raw'`.
 
-| File                                   | Table tested     | Checks                                                                                        |
-| -------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
-| `donnees_rh.xlsx`                      | `raw.employees`  | Mandatory fields not null, `gross_salary > 0`, `employee_id` unique                           |
-| `donnees_sportives.xlsx`               | `raw.sports`     | `employee_id` not null, `employee_id` unique                                                  |
-| `activites.csv` / `activites_init.csv` | `raw.activities` | Mandatory fields not null, `distance_m >= 0`, `activity_id` unique, `sport_type` in valid set |
+| File                                   | Table tested     | Checks                                                              |
+| -------------------------------------- | ---------------- | ------------------------------------------------------------------- |
+| `donnees_rh.xlsx`                      | `raw.employees`  | Mandatory fields not null, `gross_salary > 0`, `employee_id` unique |
+| `donnees_sportives.xlsx`               | `raw.sports`     | `employee_id` not null, `employee_id` unique                        |
+| `activites.csv` / `activites_init.csv` | `raw.activities` | Mandatory fields not null, `distance_m >= 0`, `activity_id` unique  |
 
 ## Clean quality tests (Great Expectations)
 

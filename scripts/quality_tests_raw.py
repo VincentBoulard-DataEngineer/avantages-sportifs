@@ -78,22 +78,6 @@ def read_table(table: str, batch_id: int, conn: Connection) -> pd.DataFrame:
         return df.where(pd.notnull(df), None)
 
 
-def load_sports(conn: Connection) -> set:
-    """
-    Load valid sport names from config.sports.
-
-    Args:
-        conn: Active psycopg2 database connection.
-
-    Returns:
-        Set of valid sport names.
-    """
-
-    with conn.cursor() as cur:
-        cur.execute("SELECT sport FROM config.sports")
-        return {row[0] for row in cur.fetchall()}
-
-
 def run_expectation(
     result: dict,
     df: pd.DataFrame,
@@ -207,6 +191,10 @@ def test_raw_sports(filename: str, conn: Connection) -> list[dict]:
     """
     Run GE quality checks on raw.sports for the current batch.
 
+    Checks: employee_id not null, employee_id unique.
+    Sport value validation is deferred to the clean quality pass,
+    where values have been normalized by cleaning.py.
+
     Args:
         filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
@@ -217,7 +205,6 @@ def test_raw_sports(filename: str, conn: Connection) -> list[dict]:
 
     batch_id = get_current_batch_id(filename, conn)
     df    = read_table("raw.sports", batch_id, conn)
-    valid_sports = load_sports(conn)
     ge_df = ge.from_pandas(df)
     ge_df.set_default_expectation_argument("result_format", "COMPLETE")
     anomalies = []
@@ -233,18 +220,6 @@ def test_raw_sports(filename: str, conn: Connection) -> list[dict]:
         df, table, "employee_id_unique", "employee_id"
     )
 
-    # sport in valid set — tested on raw values before normalization
-    df_with_sport = df[df["sport"].notna()].reset_index(drop=True)
-    if not df_with_sport.empty:
-        ge_df_sport = ge.from_pandas(df_with_sport)
-        ge_df_sport.set_default_expectation_argument("result_format", "COMPLETE")
-        anomalies += run_expectation(
-            ge_df_sport.expect_column_values_to_be_in_set(
-                "sport", list(valid_sports)
-            ).to_json_dict(),
-            df_with_sport, table, "sport_valid", "employee_id"
-        )
-
     logger.info("test_raw_sports — %s anomalies", len(anomalies))
     return anomalies
 
@@ -252,6 +227,9 @@ def test_raw_sports(filename: str, conn: Connection) -> list[dict]:
 def test_raw_activities(filename: str, conn: Connection) -> list[dict]:
     """
     Run GE quality checks on raw.activities for the current batch.
+
+    Checks: mandatory fields not null, distance_m >= 0, activity_id unique.
+    Sport type validation is deferred to the clean quality pass.
 
     Args:
         filename: Name of the ingested file, used to retrieve batch_id.
@@ -263,7 +241,6 @@ def test_raw_activities(filename: str, conn: Connection) -> list[dict]:
 
     batch_id = get_current_batch_id(filename, conn)
     df    = read_table("raw.activities", batch_id, conn)
-    valid_sports = load_sports(conn)
     ge_df = ge.from_pandas(df)
     ge_df.set_default_expectation_argument("result_format", "COMPLETE")
     anomalies = []
@@ -285,13 +262,6 @@ def test_raw_activities(filename: str, conn: Connection) -> list[dict]:
     anomalies += run_expectation(
         ge_df.expect_column_values_to_be_unique("activity_id").to_json_dict(),
         df, table, "activity_id_unique", "activity_id"
-    )
-
-    anomalies += run_expectation(
-        ge_df.expect_column_values_to_be_in_set(
-            "sport_type", list(valid_sports)
-        ).to_json_dict(),
-        df, table, "sport_type_valid", "activity_id"
     )
 
     logger.info("test_raw_activities — %s anomalies", len(anomalies))
