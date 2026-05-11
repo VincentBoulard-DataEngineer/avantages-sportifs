@@ -138,6 +138,7 @@ Each message includes the employee's name, sport type, duration, distance (if ap
 and optional comment. Intros, message bodies, and emojis are randomized for variety.
 Only activities from the current batch are processed (`batch_id` scoped query).
 Once notified, each activity is flagged `slack_notified = TRUE` to prevent duplicates.
+Activities flagged as anomalies in `quality_report.anomalies` are excluded from notifications — only valid activities trigger a Slack message.
 
 ## Eligibility calculation
 

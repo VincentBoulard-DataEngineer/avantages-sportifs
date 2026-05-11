@@ -155,9 +155,6 @@ def fetch_pending_activities(conn, batch_id: int) -> list:
     """
     Fetch activities where slack_notified = FALSE for the current batch.
 
-    Scoped to the current batch_id to avoid notifying activities from
-    a previous run that may not have been marked yet.
-
     Args:
         conn: Active psycopg2 database connection.
         batch_id: Current batch ID to scope the query.
@@ -181,7 +178,12 @@ def fetch_pending_activities(conn, batch_id: int) -> list:
             FROM clean.activities a
             JOIN clean.employees e ON a.employee_id = e.employee_id
             WHERE a.slack_notified = FALSE
-            AND a.batch_id = %s;
+            AND a.batch_id = %s
+            AND a.activity_id NOT IN (
+                SELECT activity_id
+                FROM quality_report.anomalies
+                WHERE activity_id IS NOT NULL
+            );
         """, (batch_id,))
         return cur.fetchall()
 
