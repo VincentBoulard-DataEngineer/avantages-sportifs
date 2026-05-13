@@ -111,7 +111,7 @@ which updates the config tables and triggers a full recalculation of eligibiliti
 | `commute_modes.csv` | `config.commute_modes` | Commute modes with distance thresholds |
 
 Processed files are archived to `/archive/params/`.
-²
+
 To update a parameter, edit the relevant file in `data/` and drop it into `/params/`.
 
 ## Google Maps commute validation
