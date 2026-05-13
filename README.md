@@ -25,10 +25,11 @@ docker-compose up -d
 
 ## Initial setup
 
-Before running the pipeline, load the reference data by dropping both files into `/params/`:
+Before running the pipeline, load the reference data by dropping the files into `/params/`:
 
 - `data/params.csv` — business parameters (bonus rate, activity threshold)
 - `data/sports.csv` — sports reference data with physical constraints
+- `data/commute_modes.csv` — commute modes with distance thresholds and travel modes
 
 ## How it works
 
@@ -99,19 +100,19 @@ referential integrity and per-sport physical computations.
 
 ## Parameters pipeline
 
-Business parameters and sports reference data are managed separately via the `/params/` folder.
-Dropping a file into `/params/` triggers `flow_params`, which updates the config tables
-and triggers a full recalculation of eligibilities.
+Business parameters, sports reference data and commute modes are managed separately
+via the `/params/` folder. Dropping a file into `/params/` triggers `flow_params`,
+which updates the config tables and triggers a full recalculation of eligibilities.
 
-| File         | Table updated       | Description                            |
-| ------------ | ------------------- | -------------------------------------- |
-| `params.csv` | `config.parameters` | Business parameters (bonus rate, etc.) |
-| `sports.csv` | `config.sports`     | Sports reference data with constraints |
+| File                | Table updated          | Description                            |
+| ------------------- | ---------------------- | -------------------------------------- |
+| `params.csv`        | `config.parameters`    | Business parameters (bonus rate, etc.) |
+| `sports.csv`        | `config.sports`        | Sports reference data with constraints |
+| `commute_modes.csv` | `config.commute_modes` | Commute modes with distance thresholds |
 
 Processed files are archived to `/archive/params/`.
-
-To update a parameter (e.g. change the bonus rate), edit `data/params.csv` and drop it
-into `/params/`. No code change or Docker rebuild required.
+²
+To update a parameter, edit the relevant file in `data/` and drop it into `/params/`.
 
 ## Google Maps commute validation
 
@@ -119,14 +120,9 @@ When `donnees_rh.xlsx` is processed, the pipeline validates each employee's comm
 declaration against their home address using the Google Maps Routes API.
 Only employees from the current batch are processed.
 
-| Commute mode              | Travel mode | Max distance |
-| ------------------------- | ----------- | ------------ |
-| `marche/running`          | WALK        | 15 km        |
-| `vélo/trottinette/autres` | BICYCLE     | 25 km        |
-
-Non-eligible modes (`véhicule thermique/électrique`, `transports en commun`) are
-automatically excluded from the sports bonus. Anomalies are logged in
-`quality_report.anomalies`.
+Commute mode configuration is loaded from `config.commute_modes` — no hardcoded values.
+Non-eligible modes (null `travel_mode`) are automatically excluded from the sports bonus.
+Anomalies are logged in `quality_report.anomalies`.
 
 ## Slack notifications
 

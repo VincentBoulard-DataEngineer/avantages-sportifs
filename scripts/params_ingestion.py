@@ -97,9 +97,42 @@ def load_sports(filepath: str, conn: Connection) -> None:
     logger.info("config.sports upserted: %s rows", len(df))
 
 
+def load_commute_modes(filepath: str, conn: Connection) -> None:
+    """
+    Load commute modes reference data into config.commute_modes — UPSERT on mode.
+
+    Args:
+        filepath: Path to the commute_modes CSV file.
+        conn: Active psycopg2 database connection.
+    """
+
+    df = pd.read_csv(filepath)
+
+    rows = [
+        (
+            str(row.mode).strip(),
+            None if pd.isna(row.threshold_m) else int(row.threshold_m),
+            None if pd.isna(row.travel_mode) else str(row.travel_mode).strip(),
+        )
+        for row in df.itertuples(index=False)
+    ]
+
+    with conn.cursor() as cur:
+        execute_values(cur, """
+            INSERT INTO config.commute_modes (mode, threshold_m, travel_mode)
+            VALUES %s
+            ON CONFLICT (mode) DO UPDATE SET
+                threshold_m = EXCLUDED.threshold_m,
+                travel_mode    = EXCLUDED.travel_mode
+        """, rows)
+    conn.commit()
+    logger.info("config.commute_modes upserted: %s rows", len(df))
+
+
 FILE_TYPE_MAP = {
-    "params.csv": load_params,
-    "sports.csv": load_sports,
+    "params.csv":        load_params,
+    "sports.csv":        load_sports,
+    "commute_modes.csv": load_commute_modes,
 }
 
 

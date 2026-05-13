@@ -29,18 +29,29 @@ DB_CONFIG = {
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 OFFICE_ADDRESS = "1362 Av. des Platanes, 34970 Lattes"
 
-COMMUTE_CONFIG = {
-    "marche/running": {
-        "travel_mode": "WALK",
-        "threshold_m": 15000,
-    },
-    "vélo/trottinette/autres": {
-        "travel_mode": "BICYCLE",
-        "threshold_m": 25000,
-    },
-}
 
-ELIGIBLE_MODES = set(COMMUTE_CONFIG.keys())
+def load_commute_config(conn: Connection) -> dict:
+    """
+    Load commute modes configuration from config.commute_modes.
+
+    Args:
+        conn: Active psycopg2 database connection.
+
+    Returns:
+        Dict mapping mode -> {travel_mode, threshold_m} or
+        mode -> {travel_mode: None, threshold_m: None} for non-eligible modes.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT mode, threshold_m, travel_mode FROM config.commute_modes")
+        rows = cur.fetchall()
+
+    if not rows:
+        raise ValueError("config.commute_modes is empty — load commute_modes.csv first")
+
+    return {
+        mode: {"threshold_m": threshold_m, "travel_mode": travel_mode}
+        for mode, threshold_m, travel_mode in rows
+    }
 
 
 def get_current_batch_id(filename: str, conn: Connection) -> int:
@@ -105,15 +116,12 @@ def validate_commutes(filename: str, conn: Connection) -> None:
     """
     Validate commute declarations for employees in the current batch.
 
-    Reads only employees from the current batch (filtered by batch_id),
-    calls Google Maps API for eligible commute modes, and updates
-    clean.employees with distance and validation result.
-
     Args:
         filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
     """
 
+    commute_config = load_commute_config(conn)
     batch_id = get_current_batch_id(filename, conn)
 
     with conn.cursor() as cur:
@@ -131,12 +139,13 @@ def validate_commutes(filename: str, conn: Connection) -> None:
 
     for employee_id, first_name, last_name, home_address, commute_mode in employees:
 
-        # Non-eligible modes — no API call
-        if commute_mode not in ELIGIBLE_MODES:
+        config = commute_config.get(commute_mode)
+
+        # Unknown or non-eligible mode — no API call
+        if config is None or config["travel_mode"] is None:
             updates.append((None, False, employee_id))
             continue
 
-        config = COMMUTE_CONFIG[commute_mode]
         distance_m = get_distance_m(home_address, config["travel_mode"], GOOGLE_MAPS_API_KEY)
 
         if distance_m is None:

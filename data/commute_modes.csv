@@ -1,0 +1,5 @@
+mode,threshold_m,travel_mode
+marche/running,15000,WALK
+vélo/trottinette/autres,25000,BICYCLE
+véhicule thermique/électrique,,
+transports en commun,,
