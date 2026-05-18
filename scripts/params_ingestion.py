@@ -146,8 +146,7 @@ if __name__ == "__main__":
     filename = Path(path_to_file).name
 
     if filename not in FILE_TYPE_MAP:
-        logger.error("Unknown file: %s. Supported files: %s", filename, ", ".join(FILE_TYPE_MAP.keys()))
-        sys.exit(1)
+        sys.exit(0)
 
     logger.info("Detected file type: %s", filename)
 

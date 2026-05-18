@@ -303,8 +303,7 @@ if __name__ == "__main__":
     filename = Path(sys.argv[1]).name
 
     if filename not in FILE_TYPE_MAP:
-        logger.error("Unknown file: %s. Supported files: %s", filename, ", ".join(FILE_TYPE_MAP.keys()))
-        sys.exit(1)
+        sys.exit(0)
 
     logger.info("Starting cleaning for: %s", filename)
 

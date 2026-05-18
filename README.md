@@ -127,7 +127,8 @@ Anomalies are logged in `quality_report.anomalies`.
 ## Slack notifications
 
 When `activites.csv` is processed, `slack.py` sends one Slack message per activity
-to the `#activites-sportives` channel. Activities from `activites_init.csv` are never
+to the channel configured via the `SLACK_CHANNEL_ID` secret.  
+Activities from `activites_init.csv` are never
 notified — the filename is the signal.
 
 Each message includes the employee's name, sport type, duration, distance (if applicable),

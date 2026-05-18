@@ -2,8 +2,10 @@
 slack.py — Send Slack notifications for new activities.
 """
 
-import logging
 import os
+import sys
+import logging
+from pathlib import Path
 import random
 
 import psycopg2
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 DB_CONFIG = {
     "host":     os.getenv("POSTGRES_HOST", "localhost"),
-    "port":     int(os.getenv("POSTGRES_PORT", 5432)),
+    "port":     int(os.getenv("POSTGRES_PORT") or "5432"),
     "dbname":   os.getenv("POSTGRES_DB", "avantages_sportifs"),
     "user":     os.getenv("POSTGRES_USER"),
     "password": os.getenv("POSTGRES_PASSWORD"),
@@ -231,11 +233,12 @@ def get_current_batch_id(filename: str, conn) -> int:
     return row[0]
 
 
-def run(conn) -> None:
+def run(filename: str, conn) -> None:
     """
     Poll pending activities for the current batch and send Slack notifications.
 
     Args:
+        filename: Name of the ingested file, used to retrieve batch_id.
         conn: Active psycopg2 database connection.
     """
 
@@ -243,7 +246,7 @@ def run(conn) -> None:
         logger.error("SLACK_BOT_TOKEN or SLACK_CHANNEL_ID is not set")
         raise ValueError("Missing Slack configuration")
 
-    batch_id = get_current_batch_id("activites.csv", conn)
+    batch_id = get_current_batch_id(filename, conn)
     logger.info("Processing batch_id=%d", batch_id)
 
     activities = fetch_pending_activities(conn, batch_id)
@@ -268,10 +271,24 @@ def run(conn) -> None:
     logger.info("slack.py done — %d/%d notifications sent", sent, len(activities))
 
 
+FILE_TYPE_MAP = {
+    "activites.csv": run,
+}
+
+
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        logger.error("Usage: python slack.py <filename>")
+        sys.exit(1)
+
+    filename = Path(sys.argv[1]).name
+
+    if filename not in FILE_TYPE_MAP:
+        sys.exit(0)
+
     conn = psycopg2.connect(**DB_CONFIG)
     try:
-        run(conn)
+        FILE_TYPE_MAP[filename](filename, conn)
     except Exception as e:
         logger.error("slack.py failed: %s", e)
         raise

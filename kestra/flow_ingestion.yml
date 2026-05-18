@@ -96,58 +96,50 @@ tasks:
         script: |
           python quality_tests_clean.py "{{ json(taskrun.value).name }}"
 
-      - id: run_google_maps
-        type: io.kestra.plugin.core.flow.If
-        condition: "{{ json(taskrun.value).name == 'donnees_rh.xlsx' }}"
-        then:
-          - id: google_maps
-            type: io.kestra.plugin.scripts.shell.Script
-            containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
-            taskRunner:
-              type: io.kestra.plugin.scripts.runner.docker.Docker
-              pullPolicy: IF_NOT_PRESENT
-              networkMode: avantages_sportifs_avantages_network
-            namespaceFiles:
-              enabled: true
-            env:
-              POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
-              POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
-              POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
-              POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
-              POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
-              GOOGLE_MAPS_API_KEY: "{{secret('GOOGLE_MAPS_API_KEY')}}"
-            script: |
-              python google_maps.py "donnees_rh.xlsx"
+      - id: google_maps
+        type: io.kestra.plugin.scripts.shell.Script
+        containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          pullPolicy: IF_NOT_PRESENT
+          networkMode: avantages_sportifs_avantages_network
+        namespaceFiles:
+          enabled: true
+        env:
+          POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+          POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+          POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+          POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+          POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+          GOOGLE_MAPS_API_KEY: "{{secret('GOOGLE_MAPS_API_KEY')}}"
+        script: |
+          python google_maps.py "{{ json(taskrun.value).name }}"
 
       - id: archive_file
         type: io.kestra.plugin.fs.local.Move
         from: "/inbox/{{ json(taskrun.value).name }}"
         to: "/archive/inbox/{{ execution.startDate | date('yyyyMMddHHmmss') }}_{{ json(taskrun.value).name }}"
 
-      - id: run_slack
-        type: io.kestra.plugin.core.flow.If
-        condition: "{{ json(taskrun.value).name == 'activites.csv' }}"
-        then:
-          - id: slack
-            type: io.kestra.plugin.scripts.shell.Script
-            containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
-            taskRunner:
-              type: io.kestra.plugin.scripts.runner.docker.Docker
-              pullPolicy: IF_NOT_PRESENT
-              networkMode: avantages_sportifs_avantages_network
-            namespaceFiles:
-              enabled: true
-            env:
-              POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
-              POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
-              POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
-              POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
-              POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
-              SLACK_BOT_TOKEN: "{{secret('SLACK_BOT_TOKEN')}}"
-              SLACK_CHANNEL_ID: "{{secret('SLACK_CHANNEL_ID')}}"
-              SLACK_API_URL: "{{secret('SLACK_API_URL')}}"
-            script: |
-              python slack.py
+      - id: slack
+        type: io.kestra.plugin.scripts.shell.Script
+        containerImage: ghcr.io/vincentboulard-dataengineer/avantages-sportifs:latest
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+          pullPolicy: IF_NOT_PRESENT
+          networkMode: avantages_sportifs_avantages_network
+        namespaceFiles:
+          enabled: true
+        env:
+          POSTGRES_HOST: "{{secret('POSTGRES_HOST')}}"
+          POSTGRES_USER: "{{secret('POSTGRES_USER')}}"
+          POSTGRES_PASSWORD: "{{secret('POSTGRES_PASSWORD')}}"
+          POSTGRES_DB: "{{secret('POSTGRES_DB')}}"
+          POSTGRES_PORT: "{{secret('POSTGRES_PORT')}}"
+          SLACK_BOT_TOKEN: "{{secret('SLACK_BOT_TOKEN')}}"
+          SLACK_CHANNEL_ID: "{{secret('SLACK_CHANNEL_ID')}}"
+          SLACK_API_URL: "{{secret('SLACK_API_URL')}}"
+        script: |
+          python slack.py "{{ json(taskrun.value).name }}"
 
   - id: calculs
     type: io.kestra.plugin.scripts.shell.Script

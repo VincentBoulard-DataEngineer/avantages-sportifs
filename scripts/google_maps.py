@@ -190,6 +190,11 @@ def validate_commutes(filename: str, conn: Connection) -> None:
     logger.info("Commute validation done: %s updates, %s anomalies", len(updates), len(anomalies))
 
 
+FILE_TYPE_MAP = {
+    "donnees_rh.xlsx": validate_commutes,
+}
+
+
 if __name__ == "__main__":
     if not GOOGLE_MAPS_API_KEY:
         logger.error("GOOGLE_MAPS_API_KEY is not set")
@@ -201,9 +206,12 @@ if __name__ == "__main__":
 
     filename = Path(sys.argv[1]).name
 
+    if filename not in FILE_TYPE_MAP:
+        sys.exit(0)
+
     db_conn = psycopg2.connect(**DB_CONFIG)
     try:
-        validate_commutes(filename, db_conn)
+        FILE_TYPE_MAP[filename](filename, db_conn)
     except Exception as e:
         logger.error("Google Maps validation failed: %s", e)
         raise

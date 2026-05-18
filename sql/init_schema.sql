@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS config.sports (
 
 CREATE TABLE IF NOT EXISTS config.commute_modes (
     mode        TEXT PRIMARY KEY,
-    threshold_m INTEGER NOT NULL,
-    travel_mode TEXT NOT NULL
+    threshold_m INTEGER,
+    travel_mode TEXT
 );
 
 
